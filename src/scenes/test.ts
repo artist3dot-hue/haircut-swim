@@ -41,7 +41,7 @@ export class TestScene implements Scene {
     ctx.fillStyle = SCENE.ui.panel
     ctx.fillRect(6, 216, W - 12, 58)
     const icons = spriteNames('icon.')
-    const pitch = 35
+    const pitch = 32
     icons.forEach((name, i) => {
       const bob = Math.round(Math.sin(t * 3 + i * 0.7) * 1.5)
       drawSprite(ctx, name, W / 2 + (i - (icons.length - 1) / 2) * pitch, 245 + bob)
@@ -65,7 +65,7 @@ export class TestScene implements Scene {
 
     // 像素数字
     drawPixelText(ctx, FONT_HUD, '1.23K 4.56M 7.89B', W / 2, 160, { color: '#ffffff', outline: SCENE.ui.text, align: 'center', scale: 2 })
-    drawPixelText(ctx, FONT_TINY, '+1 +12 +128 x1.5 50!', W / 2, 186, { color: RAMPS.gold[4], outline: SCENE.ui.text, align: 'center', scale: 2 })
+    drawPixelText(ctx, FONT_TINY, '+1 +12 +128 x1.5 50!', W / 2, 180, { color: RAMPS.gold[4], outline: SCENE.ui.text, align: 'center', scale: 2 })
   }
 
   overlay(ctx: CanvasRenderingContext2D): void {

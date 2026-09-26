@@ -87,7 +87,13 @@ mkdirSync(outDir, { recursive: true })
 
 const server = await preview({ root, logLevel: 'warn', preview: { port: PORT, strictPort: true, host: '127.0.0.1' } })
 const base = `http://127.0.0.1:${PORT}/`
-const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] })
+// Playwright 自带的浏览器不存在时（例如云端环境预装的是别的版本），退回到预装的 Chromium
+const launchOpts = { args: ['--autoplay-policy=no-user-gesture-required'] }
+if (!existsSync(chromium.executablePath())) {
+  const fallback = process.env.HS_CHROMIUM ?? '/opt/pw-browsers/chromium'
+  if (existsSync(fallback)) launchOpts.executablePath = fallback
+}
+const browser = await chromium.launch(launchOpts)
 const problems = []
 const shots = []
 
@@ -139,8 +145,17 @@ for (const item of plan) {
   })
   const page = await ctx.newPage()
   page.on('console', (m) => {
-    if (m.type() === 'error') problems.push(`[${item.name}] console.error: ${m.text()}`)
+    // 资源加载失败另外按 URL 判断（外链字体在无网或代理环境下会失败，属于可接受的兜底）
+    if (m.type() === 'error' && !m.text().startsWith('Failed to load resource')) problems.push(`[${item.name}] console.error: ${m.text()}`)
     else if (m.type() === 'warning') console.log(`  (${item.name}) warn: ${m.text()}`)
+  })
+  const localRes = (u) => u.startsWith(base)
+  page.on('requestfailed', (r) => {
+    if (localRes(r.url())) problems.push(`[${item.name}] 本地资源加载失败: ${r.url()}`)
+    else console.log(`  (${item.name}) 外链加载失败（字体会用系统字体兜底）: ${r.url()}`)
+  })
+  page.on('response', (r) => {
+    if (r.status() >= 400 && localRes(r.url())) problems.push(`[${item.name}] HTTP ${r.status()}: ${r.url()}`)
   })
   page.on('pageerror', (e) => problems.push(`[${item.name}] pageerror: ${e.message}`))
   await page.goto(base + (item.url ?? ''), { waitUntil: 'load' })
