@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.vite/
+.DS_Store
+Thumbs.db
+# 验证脚本的临时输出（正式截图放 docs/screenshots/，会提交）
+.verify-tmp/
