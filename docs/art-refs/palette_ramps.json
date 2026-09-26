@@ -1,0 +1,135 @@
+{
+ "steel": [
+  "#2b3f7a",
+  "#7d93cf",
+  "#a8bdea",
+  "#cddcfa",
+  "#f4f8ff"
+ ],
+ "slate": [
+  "#161d2c",
+  "#2c364d",
+  "#3d4a66",
+  "#556585",
+  "#7f91b4"
+ ],
+ "head": [
+  "#2a3656",
+  "#6f7c9e",
+  "#a2aecb",
+  "#cbd4e8",
+  "#ffffff"
+ ],
+ "pink": [
+  "#a83a66",
+  "#e17aa2",
+  "#f39fbf",
+  "#ffc3da",
+  "#ffe9f2"
+ ],
+ "glass": [
+  "#1c4c98",
+  "#58acd8",
+  "#83cbe8",
+  "#b3e4f5",
+  "#ecfbff"
+ ],
+ "label": [
+  "#8a5aa8",
+  "#d4addf",
+  "#e8cdf0",
+  "#f5e5f9",
+  "#ffffff"
+ ],
+ "capg": [
+  "#46527a",
+  "#95a2c3",
+  "#b9c4dc",
+  "#dce3f1",
+  "#ffffff"
+ ],
+ "orange": [
+  "#8a3c10",
+  "#d8742a",
+  "#ef983a",
+  "#fbbd60",
+  "#ffe2a0"
+ ],
+ "blade": [
+  "#2c4f86",
+  "#7aa4d6",
+  "#b3d0f0",
+  "#e0edfc",
+  "#ffffff"
+ ],
+ "bladep": [
+  "#9a3a66",
+  "#e07aa0",
+  "#f3a0c0",
+  "#ffc6dc",
+  "#ffffff"
+ ],
+ "lglass": [
+  "#5a5498",
+  "#aaa4dc",
+  "#c6c0ee",
+  "#e0dcfb",
+  "#ffffff"
+ ],
+ "liquid": [
+  "#5e4a96",
+  "#9c86d6",
+  "#b39ee4",
+  "#cdbcf2",
+  "#efe6ff"
+ ],
+ "pcap": [
+  "#a8466f",
+  "#e585ab",
+  "#f6a8c6",
+  "#ffc9de",
+  "#ffecf4"
+ ],
+ "pband": [
+  "#7a55a4",
+  "#b595de",
+  "#cbb2ee",
+  "#dfd0f8",
+  "#ffffff"
+ ],
+ "bcap": [
+  "#2a58a6",
+  "#6c9edd",
+  "#92bbf0",
+  "#bcd7fb",
+  "#f0f7ff"
+ ],
+ "bband": [
+  "#26529c",
+  "#5f93d6",
+  "#84b1ea",
+  "#aacbf6",
+  "#e6f1ff"
+ ],
+ "gold": [
+  "#83440f",
+  "#d6832a",
+  "#eea43e",
+  "#fbc866",
+  "#fff0b0"
+ ],
+ "mglass": [
+  "#3a78ab",
+  "#86c0e4",
+  "#aed9f2",
+  "#d5ecfb",
+  "#ffffff"
+ ],
+ "gem": [
+  "#8e2a55",
+  "#dc5a8a",
+  "#f088ae",
+  "#ffbdd4",
+  "#ffffff"
+ ]
+}
