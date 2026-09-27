@@ -8,6 +8,7 @@ import { FixedLoop } from './core/loop'
 import { PerfStats } from './core/perf'
 import { loadGame, startAutosave, save } from './core/save'
 import { loadSpriteFiles } from './art/sprites'
+import { drawCursor } from './art/cursor'
 import { loadFonts } from './art/text'
 import { allText } from './data/strings'
 import { sfx } from './audio/sfx'
@@ -57,6 +58,12 @@ async function boot(): Promise<void> {
     (alpha, frameDt) => {
       const t0 = performance.now()
       scenes.render(alpha, screen.lctx)
+      // 自己画的鼠标指针（只在用鼠标时；触屏不需要）
+      const kind = scenes.current?.cursor ? scenes.current.cursor() : 'arrow'
+      if (kind && input.seen && input.pointerType === 'mouse' && !scenes.transitioning) {
+        screen.lctx.setTransform(1, 0, 0, 1, 0, 0)
+        drawCursor(screen.lctx, kind, input.x, input.y)
+      }
       screen.present()
       scenes.overlay(screen.overlay(), alpha)
       screen.tickBackdrop(frameDt)

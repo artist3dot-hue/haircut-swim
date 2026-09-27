@@ -13,6 +13,8 @@ export interface Scene {
   render(alpha: number): void
   /** 高清层（中文字等），坐标仍是逻辑像素 */
   overlay?(ctx: CanvasRenderingContext2D, alpha: number): void
+  /** 这一帧要画哪种鼠标指针；null = 不画（比如剪发时剪刀就是指针）。不实现就画普通箭头。 */
+  cursor?(): 'arrow' | 'hand' | null
 }
 
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]

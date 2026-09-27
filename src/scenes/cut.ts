@@ -896,6 +896,14 @@ export class CutScene implements Scene {
     }
   }
 
+  /** 剪发时剪刀就是指针；弹出面板、结算时画普通指针。 */
+  cursor(): 'arrow' | 'hand' | null {
+    if (this.phase === 'play' || this.phase === 'ready') return null
+    const x = this.game.input.x
+    const y = this.game.input.y
+    return this.buttons.some((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) ? 'hand' : 'arrow'
+  }
+
   // ---------------------------------------------------------------- 调试
 
   stats(): Record<string, number | string> {

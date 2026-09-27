@@ -326,6 +326,10 @@ export class HubScene implements Scene {
     this.dialog?.overlay(ctx)
   }
 
+  cursor(): 'arrow' | 'hand' {
+    return this.hover && !this.dialog && !this.tree.isOpen ? 'hand' : 'arrow'
+  }
+
   // ---------------------------------------------------------------- 调试
 
   stats(): Record<string, number | string> {
