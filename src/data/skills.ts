@@ -1,6 +1,6 @@
-// 技能树数值表（GDD 第 11 节）。纯数据，方便调参。
-// 从中心"一把剪刀"向外展开 6 个分支，共 15 个节点；买了一个节点才露出和它相连的下一个。
-// 价格 = 基础价 × 1.15^等级。
+// 技能树（镜子）和奖牌商店的数值表（DESIGN_V2 第 4 节）。纯数据，方便调参。
+// 技能树：从中心"一双手"向外展开 6 个分支；买了一个节点才露出和它相连的下一个。
+// 价格 = 基础价 × 1.25^等级。去游泳（转生）时技能树清零，奖牌商店的加成永久保留。
 
 export type Branch = 'root' | 'sharp' | 'range' | 'rhythm' | 'harvest' | 'time' | 'combo'
 
@@ -15,30 +15,30 @@ export interface SkillDef {
   readonly ring: number
 }
 
-export const PRICE_GROWTH = 1.15
+export const PRICE_GROWTH = 1.25
 
 export const SKILLS: readonly SkillDef[] = [
   { id: 'root', branch: 'root', parent: null, base: 0, max: 1, ring: 0 },
-  // 锋利
-  { id: 'sharp', branch: 'sharp', parent: 'root', base: 4000, max: 1, ring: 1 },
-  { id: 'crit', branch: 'sharp', parent: 'sharp', base: 2500, max: 5, ring: 2 },
-  // 范围
-  { id: 'range', branch: 'range', parent: 'root', base: 500, max: 6, ring: 1 },
-  { id: 'thick', branch: 'range', parent: 'range', base: 2200, max: 3, ring: 2 },
-  // 节奏
-  { id: 'rhythm', branch: 'rhythm', parent: 'root', base: 700, max: 5, ring: 1 },
-  { id: 'follow', branch: 'rhythm', parent: 'rhythm', base: 1800, max: 3, ring: 2 },
-  // 收获
-  { id: 'harvest', branch: 'harvest', parent: 'root', base: 400, max: 10, ring: 1 },
-  { id: 'rare', branch: 'harvest', parent: 'harvest', base: 2600, max: 5, ring: 2 },
-  { id: 'untangle', branch: 'harvest', parent: 'rare', base: 6000, max: 2, ring: 3 },
-  // 时间
-  { id: 'time', branch: 'time', parent: 'root', base: 900, max: 6, ring: 1 },
-  { id: 'slow', branch: 'time', parent: 'time', base: 3500, max: 5, ring: 2 },
-  { id: 'bigcap', branch: 'time', parent: 'slow', base: 12000, max: 3, ring: 3 },
+  // 锋利：抓力（往上剪不容易缠住）、暴击
+  { id: 'grip', branch: 'sharp', parent: 'root', base: 80, max: 12, ring: 1 },
+  { id: 'crit', branch: 'sharp', parent: 'grip', base: 1800, max: 5, ring: 2 },
+  // 范围：刃更长、判定更厚
+  { id: 'range', branch: 'range', parent: 'root', base: 120, max: 10, ring: 1 },
+  { id: 'thick', branch: 'range', parent: 'range', base: 1400, max: 4, ring: 2 },
+  // 节奏：咔嚓更快、跟手更紧
+  { id: 'rhythm', branch: 'rhythm', parent: 'root', base: 160, max: 10, ring: 1 },
+  { id: 'follow', branch: 'rhythm', parent: 'rhythm', base: 1000, max: 4, ring: 2 },
+  // 收获：发丝倍率、白发、解结
+  { id: 'harvest', branch: 'harvest', parent: 'root', base: 60, max: 25, ring: 1 },
+  { id: 'rare', branch: 'harvest', parent: 'harvest', base: 3000, max: 5, ring: 2 },
+  { id: 'untangle', branch: 'harvest', parent: 'rare', base: 10000, max: 2, ring: 3 },
+  // 时间 / 头发：顺滑（纠缠度降低）、护发（长得慢）、大号泳帽
+  { id: 'smooth', branch: 'time', parent: 'root', base: 240, max: 10, ring: 1 },
+  { id: 'slow', branch: 'time', parent: 'smooth', base: 2400, max: 5, ring: 2 },
+  { id: 'bigcap', branch: 'time', parent: 'slow', base: 80000, max: 3, ring: 3 },
   // 连击
-  { id: 'grace', branch: 'combo', parent: 'root', base: 1000, max: 5, ring: 1 },
-  { id: 'combomult', branch: 'combo', parent: 'grace', base: 3200, max: 5, ring: 2 },
+  { id: 'grace', branch: 'combo', parent: 'root', base: 400, max: 5, ring: 1 },
+  { id: 'combomult', branch: 'combo', parent: 'grace', base: 5000, max: 5, ring: 2 },
 ]
 
 export const SKILL_BY_ID: Readonly<Record<string, SkillDef>> = Object.fromEntries(SKILLS.map((s) => [s.id, s]))
@@ -59,53 +59,79 @@ export function priceOf(id: string, level: number): number {
   return Math.ceil(s.base * Math.pow(PRICE_GROWTH, level))
 }
 
-/** 技能对一局的影响（全部是在 JUICE / ROUND 基础值上的修正）。 */
+// ---------------------------------------------------------------- 奖牌商店（永久）
+
+export interface MedalDef {
+  readonly id: string
+  readonly base: number
+  readonly max: number
+}
+
+export const MEDALS: readonly MedalDef[] = [
+  { id: 'm_value', base: 1, max: 20 },
+  { id: 'm_grip', base: 2, max: 10 },
+  { id: 'm_speed', base: 2, max: 10 },
+  { id: 'm_start', base: 5, max: 2 },
+  { id: 'm_slow', base: 3, max: 5 },
+  { id: 'm_combo', base: 4, max: 5 },
+]
+
+export const MEDAL_BY_ID: Readonly<Record<string, MedalDef>> = Object.fromEntries(MEDALS.map((m) => [m.id, m]))
+
+export function medalPrice(id: string, level: number): number {
+  const m = MEDAL_BY_ID[id]!
+  return Math.ceil(m.base * Math.pow(1.6, level))
+}
+
+/** 本轮累计发丝 → 去游泳拿到的奖牌数。 */
+export function medalsFor(loopHairs: number): number {
+  return Math.max(1, Math.floor(Math.sqrt(loopHairs / 2000)))
+}
+
+// ---------------------------------------------------------------- 汇总
+
+/** 技能 + 奖牌加成对剪发的影响。 */
 export interface Upgrades {
-  /** 剪刀半径 + */
+  /** 抓力 × */
+  gripMult: number
+  /** 半刃长 + */
   radius: number
-  /** 剪断判定厚度 + */
   thickness: number
   /** 咔嚓间隔 × */
   snapMult: number
-  /** 跟手速度 + */
   follow: number
-  sharpness: number
-  /** 暴击率（一刀收益 ×5） */
+  /** 暴击率（这一刀收益 ×5） */
   crit: number
-  /** 发丝倍率 */
   valueMult: number
-  /** 白发出现权重 × */
   rareMult: number
-  /** 打结发要剪的下数 − */
   knotEase: number
-  /** 单局时长 + 秒 */
-  time: number
-  /** 生长速度 × */
+  /** 纠缠度 × */
+  tangleMult: number
   growthMult: number
   /** 泳帽线往下放宽的像素 */
   capLower: number
   /** 断连判定 + 秒 */
   grace: number
-  /** 连击倍率 × */
   comboMult: number
 }
 
-export function upgradesFrom(levels: Record<string, number>): Upgrades {
-  const L = (id: string): number => Math.min(levels[id] ?? 0, SKILL_BY_ID[id]?.max ?? 0)
+export function upgradesFrom(skills: Record<string, number>, medals: Record<string, number>): Upgrades {
+  const L = (id: string): number => Math.min(skills[id] ?? 0, SKILL_BY_ID[id]?.max ?? 0)
+  const M = (id: string): number => Math.min(medals[id] ?? 0, MEDAL_BY_ID[id]?.max ?? 0)
   return {
-    radius: L('range') * 3,
+    gripMult: (1 + L('grip') * 0.06) * (1 + M('m_grip') * 0.1),
+    radius: L('range') * 1.5,
     thickness: L('thick') * 1.5,
-    snapMult: 1 - L('rhythm') * 0.05,
-    follow: L('follow') * 6,
-    sharpness: 1 + L('sharp'),
+    snapMult: Math.pow(0.95, L('rhythm')) * Math.pow(0.96, M('m_speed')),
+    follow: L('follow') * 5,
     crit: L('crit') * 0.03,
-    valueMult: 1 + L('harvest') * 0.25,
+    valueMult: (1 + L('harvest') * 0.12) * (1 + M('m_value') * 0.25),
     rareMult: 1 + L('rare') * 0.5,
     knotEase: L('untangle'),
-    time: L('time') * 5,
-    growthMult: 1 - L('slow') * 0.06,
-    capLower: L('bigcap') * 10,
-    grace: L('grace') * 0.15,
-    comboMult: 1 + L('combomult') * 0.1,
+    tangleMult: Math.pow(0.96, L('smooth')),
+    growthMult: Math.pow(0.9, L('slow')) * Math.pow(0.88, M('m_slow')),
+    capLower: L('bigcap') * 25,
+    grace: L('grace') * 0.2,
+    comboMult: (1 + L('combomult') * 0.1) * (1 + M('m_combo') * 0.1),
   }
 }

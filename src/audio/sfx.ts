@@ -8,6 +8,8 @@
 
 import { JUICE } from '../data/juice'
 
+export type SnipVoice = 'knife' | 'scissors' | 'shears' | 'garden' | 'clipper'
+
 type Ctx = AudioContext
 
 export class Sfx {
@@ -23,6 +25,7 @@ export class Sfx {
   private nextBeat = 0
   private beat = 0
   private tickLast = 0
+  private clipper: { o1: OscillatorNode; o2: OscillatorNode; lp: BiquadFilterNode; g: GainNode } | null = null
   private lastClang = 0
   private lastThud = 0
   /** 玩家设置的音量 0..1（存档里），乘在 JUICE.masterVolume 上 */
@@ -50,7 +53,13 @@ export class Sfx {
     comp.ratio.value = 4
     comp.attack.value = 0.002
     comp.release.value = 0.12
-    master.connect(comp)
+    // 整体柔一点：6.5kHz 以上轻轻压掉（EDY：不要太尖锐）
+    const soft = ctx.createBiquadFilter()
+    soft.type = 'lowpass'
+    soft.frequency.value = 6500
+    soft.Q.value = 0.5
+    master.connect(soft)
+    soft.connect(comp)
     comp.connect(ctx.destination)
     this.master = master
 
@@ -66,11 +75,11 @@ export class Sfx {
     src.loop = true
     const bp = ctx.createBiquadFilter()
     bp.type = 'bandpass'
-    bp.frequency.value = 5200
-    bp.Q.value = 0.7
+    bp.frequency.value = 3200
+    bp.Q.value = 0.8
     const hp = ctx.createBiquadFilter()
     hp.type = 'highpass'
-    hp.frequency.value = 2500
+    hp.frequency.value = 1400
     const g = ctx.createGain()
     g.gain.value = 0
     src.connect(bp)
@@ -103,11 +112,34 @@ export class Sfx {
     this.rustleEnergy = Math.min(40, this.rustleEnergy + amount)
   }
 
+  /** 带包络的一段滤波噪声。 */
+  private noiseHit(t: number, vol: number, dec: number, type: BiquadFilterType, f0: number, f1: number, q = 1, rate = 1): void {
+    const ctx = this.ctx
+    if (!ctx || !this.master || !this.noise) return
+    const n = ctx.createBufferSource()
+    n.buffer = this.noise
+    n.playbackRate.value = rate
+    const f = ctx.createBiquadFilter()
+    f.type = type
+    f.Q.value = q
+    f.frequency.setValueAtTime(f0, t)
+    if (f1 !== f0) f.frequency.exponentialRampToValueAtTime(f1, t + dec)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, t)
+    g.gain.linearRampToValueAtTime(vol, t + 0.002)
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dec)
+    n.connect(f)
+    f.connect(g)
+    g.connect(this.master)
+    n.start(t, Math.random() * 0.8, dec + 0.05)
+  }
+
   /**
-   * 剪断音。semitones：连击升调；count：这一下总共剪断几根（用来压低单个音量）。
-   * 返回是否真的播放（被限流时返回 false，并入沙沙层）。
+   * 剪断音（按工具换音色）。semitones：连击升调；count：这一下剪断几缕（压低单个音量）。
+   * 同一帧最多 maxSnipsPerFrame 个，多的并入沙沙层。返回是否真的播放。
+   * 音色原则（EDY：更爽、不要尖锐）：高频只用短噪声点缀，主体放在 150–3000Hz，给一个"实"的低频撞击。
    */
-  snip(semitones: number, count = 1): boolean {
+  snip(semitones: number, count = 1, tool: SnipVoice = 'scissors'): boolean {
     const ctx = this.ctx
     if (!ctx || !this.master || !this.noise) return false
     const now = ctx.currentTime
@@ -117,72 +149,96 @@ export class Sfx {
     }
     if (this.frameCount >= JUICE.maxSnipsPerFrame) {
       this.snipsMerged++
-      this.rustle(1.2)
+      this.rustle(1)
       return false
     }
-    // 同一帧里的几个音错开几毫秒，听起来是"咔嚓嚓"而不是一个很响的"咔"
-    const t = now + 0.004 + this.frameCount * 0.011 + Math.random() * 0.004
+    const t = now + 0.004 + this.frameCount * 0.013 + Math.random() * 0.004
     this.frameCount++
     this.snipsPlayed++
-    const pitch = (1 + (Math.random() * 2 - 1) * JUICE.pitchJitter) * 2 ** (semitones / 12)
-    const vol = 0.55 / Math.sqrt(Math.min(count, JUICE.maxSnipsPerFrame))
-
-    // 1) 噪声瞬态：高通 + 带通，很短
-    const n = ctx.createBufferSource()
-    n.buffer = this.noise
-    n.playbackRate.value = pitch
-    const hp = ctx.createBiquadFilter()
-    hp.type = 'highpass'
-    hp.frequency.value = 3800 * pitch
-    const bp = ctx.createBiquadFilter()
-    bp.type = 'peaking'
-    bp.frequency.value = 7200 * pitch
-    bp.gain.value = 9
-    const ng = ctx.createGain()
-    ng.gain.setValueAtTime(0, t)
-    ng.gain.linearRampToValueAtTime(vol, t + 0.0015)
-    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.045)
-    n.connect(hp)
-    hp.connect(bp)
-    bp.connect(ng)
-    ng.connect(this.master)
-    n.start(t, Math.random() * 0.9, 0.06)
-
-    // 2) 金属泛音：几个不成谐波比的高频正弦，快速衰减
-    const partials = [2870, 4130, 5610, 7450]
-    for (let i = 0; i < partials.length; i++) {
-      const o = ctx.createOscillator()
-      o.type = i === 0 ? 'triangle' : 'sine'
-      o.frequency.value = partials[i]! * pitch
-      const g = ctx.createGain()
-      const pv = vol * (0.22 - i * 0.04)
-      const dec = 0.07 - i * 0.012
-      g.gain.setValueAtTime(0, t)
-      g.gain.linearRampToValueAtTime(pv, t + 0.001)
-      g.gain.exponentialRampToValueAtTime(0.0008, t + dec)
-      o.connect(g)
-      g.connect(this.master)
-      o.start(t)
-      o.stop(t + dec + 0.01)
+    const p = (1 + (Math.random() * 2 - 1) * JUICE.pitchJitter) * 2 ** (semitones / 12)
+    const vol = 0.6 / Math.sqrt(Math.min(count, JUICE.maxSnipsPerFrame))
+    switch (tool) {
+      case 'knife':
+        // "唰"：一道从亮到暗扫过去的噪声 + 一个很轻的"嗒"
+        this.noiseHit(t, vol * 0.55, 0.07, 'bandpass', 3400 * p, 1300 * p, 1.4)
+        this.tone(900 * p, t, vol * 0.12, 0.02, 'triangle', 500 * p)
+        break
+      case 'scissors':
+        // "咔嚓"：刃先碰一下（小"嗒"），紧接着合上（实心的撞击 + 中频的嚓）
+        this.tone(1300 * p, t, vol * 0.06, 0.012, 'triangle')
+        this.tone(210 * p, t + 0.012, vol * 0.42, 0.06, 'sine', 120 * p)
+        this.noiseHit(t + 0.012, vol * 0.5, 0.055, 'bandpass', 2600 * p, 1800 * p, 1.1)
+        this.tone(1650 * p, t + 0.012, vol * 0.07, 0.07, 'triangle')
+        this.tone(2430 * p, t + 0.012, vol * 0.04, 0.05)
+        break
+      case 'shears':
+        // 理发剪：更清脆一点，带一点金属余韵，但泛音压在 3kHz 以下
+        this.tone(1500 * p, t, vol * 0.05, 0.01, 'triangle')
+        this.tone(190 * p, t + 0.01, vol * 0.4, 0.07, 'sine', 110 * p)
+        this.noiseHit(t + 0.01, vol * 0.45, 0.05, 'bandpass', 3000 * p, 2000 * p, 1.3)
+        this.tone(1320 * p, t + 0.01, vol * 0.08, 0.14, 'triangle')
+        this.tone(1980 * p, t + 0.01, vol * 0.05, 0.11)
+        this.tone(2640 * p, t + 0.01, vol * 0.025, 0.08)
+        break
+      case 'garden':
+        // 园艺大剪："咔嚓"变"喀"：很沉的撞击
+        this.tone(120 * p, t, vol * 0.6, 0.1, 'sine', 65 * p)
+        this.noiseHit(t, vol * 0.55, 0.08, 'lowpass', 1600 * p, 700 * p, 0.8)
+        this.tone(880 * p, t, vol * 0.07, 0.06, 'triangle')
+        break
+      case 'clipper':
+        // 电推子：每剪断一缕只是一个很轻的"嗤"，主体是持续的嗡嗡声（setClipper）
+        this.noiseHit(t, vol * 0.3, 0.035, 'bandpass', 2200 * p, 1600 * p, 1.2)
+        break
     }
-
-    // 3) 低一点的"咔"：刃合上的实感
-    const c = ctx.createOscillator()
-    c.type = 'square'
-    c.frequency.setValueAtTime(1400 * pitch, t)
-    c.frequency.exponentialRampToValueAtTime(500 * pitch, t + 0.012)
-    const cg = ctx.createGain()
-    cg.gain.setValueAtTime(vol * 0.12, t)
-    cg.gain.exponentialRampToValueAtTime(0.0008, t + 0.016)
-    const clp = ctx.createBiquadFilter()
-    clp.type = 'lowpass'
-    clp.frequency.value = 3000
-    c.connect(clp)
-    clp.connect(cg)
-    cg.connect(this.master)
-    c.start(t)
-    c.stop(t + 0.03)
     return true
+  }
+
+  /** 缠住了："咔嗒"卡住 + 一声闷闷的"呃"（头发被扯）。 */
+  jam(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.004
+    this.tone(95, t, 0.22, 0.07, 'square', 70)
+    this.noiseHit(t, 0.25, 0.06, 'lowpass', 900, 400, 0.7)
+    this.tone(210, t + 0.05, 0.1, 0.2, 'triangle', 120)
+    this.rustle(3)
+  }
+
+  /** 电推子的持续嗡嗡声：on 开关；load 0..1 推过头发时的负载（声音被压低、变闷）。 */
+  setClipper(on: boolean, load = 0): void {
+    const ctx = this.ctx
+    if (!ctx || !this.master) return
+    if (on && !this.clipper) {
+      const o1 = ctx.createOscillator()
+      o1.type = 'sawtooth'
+      o1.frequency.value = 118
+      const o2 = ctx.createOscillator()
+      o2.type = 'square'
+      o2.frequency.value = 236.5
+      const lp = ctx.createBiquadFilter()
+      lp.type = 'lowpass'
+      lp.frequency.value = 1400
+      const g = ctx.createGain()
+      g.gain.value = 0
+      const g2 = ctx.createGain()
+      g2.gain.value = 0.35
+      o1.connect(lp)
+      o2.connect(g2)
+      g2.connect(lp)
+      lp.connect(g)
+      g.connect(this.master)
+      o1.start()
+      o2.start()
+      this.clipper = { o1, o2, lp, g }
+    }
+    const c = this.clipper
+    if (!c) return
+    const now = ctx.currentTime
+    c.g.gain.setTargetAtTime(on ? 0.07 * (1 - load * 0.45) : 0, now, 0.05)
+    c.lp.frequency.setTargetAtTime(1400 - load * 700, now, 0.04)
+    c.o1.frequency.setTargetAtTime(118 - load * 14, now, 0.05)
+    c.o2.frequency.setTargetAtTime(236.5 - load * 28, now, 0.05)
   }
 
   /** 没剪到东西的空剪：轻、短、偏低。 */
@@ -195,7 +251,7 @@ export class Sfx {
     n.buffer = this.noise
     const bp = ctx.createBiquadFilter()
     bp.type = 'bandpass'
-    bp.frequency.value = 3400 * pitch
+    bp.frequency.value = 2200 * pitch
     bp.Q.value = 3
     const g = ctx.createGain()
     g.gain.setValueAtTime(0.09, t)

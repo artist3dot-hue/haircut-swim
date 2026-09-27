@@ -13,8 +13,8 @@ import { loadFonts } from './art/text'
 import { allText } from './data/strings'
 import { sfx } from './audio/sfx'
 import { TestScene } from './scenes/test'
-import { CutScene } from './scenes/cut'
-import { HubScene } from './scenes/hub'
+import { PoolScene } from './scenes/pool'
+import { IntroScene } from './scenes/intro'
 import type { Game, SceneName } from './game'
 
 async function boot(): Promise<void> {
@@ -29,9 +29,9 @@ async function boot(): Promise<void> {
   sfx.volume = save.settings.volume
 
   const make = (name: SceneName): Scene => {
-    if (name === 'cut') return new CutScene(game)
+    if (name === 'intro') return new IntroScene(game)
     if (name === 'test') return new TestScene(game)
-    return new HubScene(game)
+    return new PoolScene(game)
   }
   const game: Game = {
     screen,
@@ -46,9 +46,11 @@ async function boot(): Promise<void> {
 
   await Promise.all([loadSpriteFiles(), loadFonts(allText())])
 
-  // 按 ?scene= 进入场景（hub / cut / test），默认主界面
+  // 按 ?scene= 进入场景（intro / cut / test）；第一次打开先放开场动画，之后直接到泳池边
   const which = new URLSearchParams(location.search).get('scene')
-  scenes.set(make(which === 'cut' || which === 'test' ? which : 'hub'))
+  if (which === 'test') scenes.set(make('test'))
+  else if (which === 'intro' || (!which && !save.introSeen)) scenes.set(make('intro'))
+  else scenes.set(make('pool'))
 
   const loop = new FixedLoop(
     (dt) => {
@@ -85,6 +87,9 @@ async function boot(): Promise<void> {
     stats: () => cur()?.stats?.() ?? null,
     debug: () => cur()?.debugApi?.() ?? null,
     save: () => save,
+    setSpeed: (k: number) => {
+      loop.speed = k
+    },
   }
 }
 

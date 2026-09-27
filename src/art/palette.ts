@@ -57,6 +57,11 @@ export const SCENE = {
   goldSpark: '#fff0b0',
   /** 彩虹发，沿发丝渐变 */
   rainbow: ['#ff7eb6', '#ffcc5c', '#7ee0a0', '#6ab8ff', '#b58cff'],
+  /**
+   * 皮肤（阿发的脸、手、头皮）：palette 里没有专门的肤色，用现有颜色拼一条 5 档色阶：
+   * 描边 = orange 最深档，暗部 / 中间 / 亮部 = 暖粉地砖三档，高光 = pink 最亮档。
+   */
+  skin: ['#8a3c10', '#d2b3a1', '#fbd6bb', '#fee4c7', '#ffe9f2'],
   /** UI 面板：奶白底、珊瑚粉边、深青文字 */
   ui: { panel: '#fff8ee', border: '#e8a0a0', text: '#1d4f55' },
 } as const

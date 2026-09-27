@@ -14,8 +14,8 @@ import { SCENE } from '../art/palette'
 
 const BACKDROP_DIM = SCENE.ui.text
 
-export const W = 360
-export const H = 640
+export const W = 540
+export const H = 960
 
 export type ScaleMode = 'auto' | 'integer'
 

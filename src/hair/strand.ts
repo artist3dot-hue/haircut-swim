@@ -17,6 +17,9 @@ export interface StrandParams {
 
 import type { HairKind } from '../data/hair'
 
+let scratchX = new Float64Array(256)
+let scratchY = new Float64Array(256)
+
 export class Strand {
   /** 头发种类（见 src/data/hair.ts） */
   kind: HairKind = 'normal'
@@ -127,7 +130,13 @@ export class Strand {
       this.y[i] = y + vy
     }
     if (push) push.apply(this)
-    // 长度约束：从根往下，每个点放到"前一点 + 方向 × 静止长度"
+    // 长度约束（DFTL，Müller 2012）：从根往下，每个点放到"前一点 + 方向 × 静止长度"，
+    // 记下每个点被挪了多少（d），然后用"下一个点的修正量"去修正这个点的速度。
+    // 这样长链（上百个点）也不会慢慢积攒能量、缩成一团。
+    const dxs = scratchX.length >= n ? scratchX : (scratchX = new Float64Array(n * 2))
+    const dys = scratchY.length >= n ? scratchY : (scratchY = new Float64Array(n * 2))
+    dxs[0] = 0
+    dys[0] = 0
     for (let i = 1; i < n; i++) {
       const ax = this.x[i - 1]!
       const ay = this.y[i - 1]!
@@ -137,13 +146,29 @@ export class Strand {
       const r = this.rest[i - 1]!
       const nx = ax + (dx / d) * r
       const ny = ay + (dy / d) * r
-      // 修正量大部分同步到上一帧位置，避免约束凭空制造速度（抖动）
-      this.px[i]! += (nx - this.x[i]!) * 0.85
-      this.py[i]! += (ny - this.y[i]!) * 0.85
+      dxs[i] = nx - this.x[i]!
+      dys[i] = ny - this.y[i]!
       this.x[i] = nx
       this.y[i] = ny
+    }
+    const sDamp = 0.9
+    const maxV = 40
+    for (let i = 1; i < n; i++) {
+      const cx = i + 1 < n ? dxs[i + 1]! : 0
+      const cy = i + 1 < n ? dys[i + 1]! : 0
+      // 隐式速度 = x - px；目标速度 = (新位置 - 旧位置) - s·d(i+1)
+      this.px[i]! += sDamp * cx
+      this.py[i]! += sDamp * cy
+      // 保险：限制单步速度
+      const vx = this.x[i]! - this.px[i]!
+      const vy = this.y[i]! - this.py[i]!
+      const v = Math.hypot(vx, vy)
+      if (v > maxV) {
+        this.px[i] = this.x[i]! - (vx / v) * maxV
+        this.py[i] = this.y[i]! - (vy / v) * maxV
+      }
       // 地板：躺在地上，带摩擦
-      if (ny > p.floorY) {
+      if (this.y[i]! > p.floorY) {
         this.y[i] = p.floorY
         this.py[i] = p.floorY
         this.px[i] = this.x[i]! - (this.x[i]! - this.px[i]!) * 0.4
@@ -223,6 +248,8 @@ export class Push {
   mvx = 0
   mvy = 0
   strength = 0.3
+  /** 刃的半长：刃正下方的头发不拨开（否则剪刀停着时头发全被拨走、剪不到） */
+  blade = 0
 
   apply(s: Strand): void {
     const n = s.x.length
@@ -238,7 +265,8 @@ export class Push {
       s.x[i]! += this.mvx * f * 0.5
       s.y[i]! += this.mvy * f * 0.3
       // 往两边分开一点（剪刀的刃像梳子一样拨开头发）
-      s.x[i]! += Math.sign(dx || 1) * f * 0.9
+      // 只拨开刃尖外侧的头发，且只在剪刀移动时
+      if (Math.abs(dx) > this.blade) s.x[i]! += Math.sign(dx || 1) * f * 0.9 * Math.min(1, Math.hypot(this.mvx, this.mvy) / 3)
     }
   }
 }

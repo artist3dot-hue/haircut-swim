@@ -10,6 +10,8 @@ export class FixedLoop {
   private running = false
   /** 逻辑步数（从启动开始计） */
   ticks = 0
+  /** 游戏速度倍率（只给平衡测试的机器人用） */
+  speed = 1
 
   constructor(
     private readonly update: (dt: number) => void,
@@ -29,7 +31,7 @@ export class FixedLoop {
     this.last = now
     if (delta > MAX_FRAME) delta = MAX_FRAME
     if (delta < 0) delta = 0
-    this.acc += delta
+    this.acc += delta * this.speed
     while (this.acc >= STEP) {
       this.update(STEP)
       this.ticks++

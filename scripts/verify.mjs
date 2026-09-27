@@ -1,6 +1,6 @@
 // 验证脚本：启动 vite preview（需先 npm run build），用 Playwright 打开，按阶段截图、
 // 模拟拖动剪发，打印控制台报错和平均帧时间。
-// 用法：node scripts/verify.mjs --stage 1 [--only 名字] [--out 目录]
+// 用法：node scripts/verify.mjs [--stage v2|0] [--only 名字] [--out 目录]
 import { preview } from 'vite'
 import { chromium } from 'playwright'
 import { mkdirSync, existsSync } from 'node:fs'
@@ -13,7 +13,7 @@ const arg = (k, d) => {
   const i = args.indexOf(`--${k}`)
   return i >= 0 ? args[i + 1] : d
 }
-const stage = arg('stage', '0')
+const stage = arg('stage', 'v2')
 const only = arg('only', null)
 const outDir = join(root, arg('out', `docs/screenshots/stage${stage}`))
 const PORT = 4180
@@ -26,162 +26,134 @@ const MOBILE = { viewport: { width: 390, height: 844 }, dpr: 3, mobile: true }
 const PLANS = {
   0: [
     { name: 'desktop-test', device: DESKTOP, url: '?scene=test', steps: [{ wait: 1500 }, { shot: 'desktop-test' }] },
-    { name: 'mobile-test', device: MOBILE, url: '?scene=test', steps: [{ wait: 1500 }, { shot: 'mobile-test' }] },
   ],
-  1: [
+  // v2：开场 → 泳池边 → 拉近剪发 → 缠住 → 回去买工具 / 技能 → 泳帽线 → 去游泳
+  v2: [
     {
-      name: 'cut-desktop',
-      device: DESKTOP_1080,
-      url: '?scene=cut&seed=7',
-      steps: [
-        { wait: 1200 },
-        { shot: 'cut-00-start' },
-        // 点一下：解锁声音（浏览器要求用户手势）
-        { click: [180, 560] },
-        { resetPerf: true },
-        { drag: 1.2, from: [60, 330], to: [300, 360] },
-        { shot: 'cut-01-first-cuts', noWait: true },
-        { drag: 3, pattern: 'sweep', y: [300, 470] },
-        { shot: 'cut-02-sweeping', noWait: true },
-        { drag: 6, pattern: 'sweep', y: [220, 520] },
-        { perf: '拖动剪发 10 秒' },
-        { shot: 'cut-03-after-10s', noWait: true },
-        { key: '`' },
-        { wait: 300 },
-        { shot: 'cut-04-debug-panel' },
-      ],
-    },
-    {
-      name: 'cut-mobile',
-      device: MOBILE,
-      url: '?scene=cut&seed=11',
-      steps: [{ wait: 1200 }, { click: [180, 560] }, { drag: 3, pattern: 'sweep', y: [260, 480] }, { shot: 'cut-05-mobile', noWait: true }],
-    },
-  ],
-  2: [
-    {
-      name: 'round-desktop',
-      device: DESKTOP_1080,
-      url: '?scene=cut&seed=7',
-      steps: [
-        { wait: 1200 },
-        { shot: 'round-00-start' },
-        { click: [180, 560] },
-        { resetPerf: true },
-        { drag: 10, pattern: 'sweep', y: [150, 520] },
-        { perf: '一局中拖动 10 秒' },
-        { shot: 'round-01-mid', noWait: true },
-        // 头发一下长很多 → 危险预兆（边缘被头发侵占、发量条闪）
-        // 剪刀先挪到左下角，别把刚长出来的头发剪掉
-        { drag: 0.3, from: [4, 600], to: [4, 600] },
-        { eval: 'window.__hs.debug().growAll(260)' },
-        { drag: 0.6, from: [4, 600], to: [6, 600] },
-        { shot: 'round-02-warning', noWait: true },
-        // 再长 → 爆表 → 被头发淹没
-        { eval: 'window.__hs.debug().growAll(400)' },
-        { stats: '长头发后' },
-        { wait: 1100 },
-        { shot: 'round-03-drown', noWait: true },
-        { wait: 1400 },
-        { shot: 'round-04-result-drown', noWait: true },
-        { stats: '爆表后' },
-      ],
-    },
-    {
-      name: 'round-cap',
-      device: DESKTOP,
-      url: '?scene=cut&seed=9',
-      steps: [
-        { wait: 1000 },
-        { click: [180, 560] },
-        { drag: 1.5, pattern: 'sweep', y: [200, 300] },
-        // 把能剪的头发都剪到泳帽线以上，等 3 秒 → "可以去游泳了！"
-        { eval: 'window.__hs.debug().trimAll()' },
-        { drag: 1.6, from: [180, 560], to: [200, 560] },
-        { shot: 'round-05-holding', noWait: true },
-        { wait: 2200 },
-        { shot: 'round-06-cap-prompt' },
-        { click: [180, 418] },
-        { drag: 2, pattern: 'sweep', y: [150, 400] },
-        { shot: 'round-07-keep-cutting', noWait: true },
-        { eval: 'window.__hs.debug().setTime(1.2)' },
-        { wait: 3000 },
-        { shot: 'round-08-result-time' },
-        { stats: '时间到后' },
-        { click: [180, 461] },
-        { wait: 500 },
-        { shot: 'round-09-again' },
-      ],
-    },
-    {
-      name: 'round-mobile',
-      device: MOBILE,
-      url: '?scene=cut&seed=11',
-      steps: [{ wait: 1200 }, { click: [180, 560] }, { drag: 3, pattern: 'sweep', y: [140, 380] }, { shot: 'round-10-mobile', noWait: true }],
-    },
-  ],
-  3: [
-    {
-      name: 'hub-desktop',
+      name: 'v2-intro',
       device: DESKTOP_1080,
       url: '',
       steps: [
-        { wait: 1400 },
-        { shot: 'hub-00-first-visit' },
-        // 点一下空墙解锁声音（点泳池会打开泳池弹窗）
-        { click: [180, 240] },
-        { drag: 0.5, from: [120, 300], to: [68, 118] },
-        { wait: 150 },
-        { shot: 'hub-01-hover-mirror' },
-        { eval: 'window.__hs.debug().addHairs(20000)' },
-        { click: [68, 118] },
-        { wait: 500 },
-        { shot: 'hub-02-skill-tree' },
-        // 买：范围（上）、收获（右下）×2、时间（下）
-        { click: [180, 192] },
-        { click: [180, 606] },
-        { click: [241, 297] },
-        { click: [180, 606] },
-        { click: [180, 606] },
-        { click: [180, 332] },
-        { click: [180, 606] },
-        { wait: 200 },
-        { shot: 'hub-03-tree-bought' },
-        { stats: '买完技能' },
-        { click: [322, 20] },
-        { wait: 400 },
-        { click: [320, 400] },
-        { wait: 400 },
-        { shot: 'hub-04-settings' },
-        { click: [180, 470] },
-        { eval: 'window.__hs.debug().setHubHair(0.95)' },
-        { drag: 0.4, from: [180, 560], to: [180, 600] },
-        { shot: 'hub-05-panic' },
-        { click: [180, 380] },
-        { wait: 280 },
-        { shot: 'hub-06-transition', noWait: true },
-        { wait: 900 },
-        { drag: 2, pattern: 'sweep', y: [150, 420] },
-        { shot: 'hub-07-cut-upgraded', noWait: true },
-        { stats: '升级后的一局' },
-        { eval: 'window.__hs.debug().setTime(1)' },
+        { wait: 1500 },
+        { shot: 'intro-01-summer' },
         { wait: 3200 },
-        { shot: 'hub-08-result' },
-        { click: [112, 461] },
-        { wait: 1300 },
-        { shot: 'hub-09-back-home' },
-        { stats: '回到主界面' },
-        { reload: true },
-        { wait: 1400 },
-        { stats: '刷新页面后（存档）' },
-        { shot: 'hub-10-reloaded' },
+        { shot: 'intro-02-walk' },
+        { wait: 4200 },
+        { shot: 'intro-03-sign' },
+        { wait: 1900 },
+        { shot: 'intro-04-pop' },
+        { wait: 3000 },
+        { shot: 'intro-05-knife' },
+        { wait: 2800 },
+        { shot: 'intro-06-title' },
+        { click: [270, 620] },
+        { wait: 1200 },
+        { shot: 'hub-01-first' },
+        { stats: '进入泳池边' },
       ],
     },
     {
-      name: 'hub-mobile',
+      name: 'v2-play',
+      device: DESKTOP_1080,
+      url: '?scene=pool',
+      init: () => localStorage.setItem('hs.save', JSON.stringify({ version: 2, introSeen: true })),
+      steps: [
+        { wait: 1500 },
+        { click: [100, 180] },
+        { drag: 0.5, from: [200, 300], to: [270, 520] },
+        { wait: 200 },
+        { shot: 'hub-02-hover-afa' },
+        { click: [270, 520] },
+        { wait: 380 },
+        { shot: 'cut-01-zoom', noWait: true },
+        { wait: 900 },
+        { shot: 'cut-02-start' },
+        { resetPerf: true },
+        { drag: 10, pattern: 'sweep', y: [700, 900] },
+        { perf: '剪发 10 秒（发梢附近）' },
+        { shot: 'cut-03-after-10s', noWait: true },
+        { drag: 1.5, from: [270, 300], to: [300, 320] },
+        { shot: 'cut-04-tangle', noWait: true },
+        { stats: '剪了一会儿' },
+        { click: [460, 40] },
+        { wait: 1200 },
+        { shot: 'hub-03-back' },
+        { eval: 'window.__hs.debug().addHairs(3000)' },
+        { click: [420, 370] },
+        { wait: 400 },
+        { shot: 'hub-04-toolshop' },
+        { click: [440, 247] },
+        { wait: 300 },
+        { shot: 'hub-05-bought-scissors' },
+        { click: [470, 50] },
+        { wait: 300 },
+        { click: [86, 320] },
+        { wait: 500 },
+        { shot: 'hub-06-tree' },
+        { click: [270, 280] },
+        { click: [270, 902] },
+        { wait: 300 },
+        { shot: 'hub-07-tree-bought' },
+        { click: [470, 50] },
+        { wait: 300 },
+        { click: [468, 660] },
+        { wait: 400 },
+        { shot: 'hub-08-settings' },
+      ],
+    },
+    {
+      name: 'v2-cap',
+      device: DESKTOP_1080,
+      url: '?scene=cut',
+      init: () => localStorage.setItem('hs.save', JSON.stringify({ version: 2, introSeen: true })),
+      steps: [
+        { wait: 1500 },
+        { click: [270, 900] },
+        { eval: 'window.__hs.debug().setTool("garden")' },
+        { eval: 'window.__hs.debug().trimTo(700)' },
+        { drag: 3, pattern: 'sweep', y: [500, 900] },
+        { shot: 'cut-05-near-top', noWait: true },
+        { eval: 'window.__hs.debug().trimTo(200)' },
+        { drag: 2.5, from: [30, 940], to: [40, 940] },
+        { shot: 'cut-06-capline', noWait: true },
+        { wait: 2500 },
+        { shot: 'cut-07-can-swim' },
+        { click: [270, 540] },
+        { wait: 1300 },
+        { shot: 'hub-09-pool-glow' },
+        { click: [270, 880] },
+        { wait: 500 },
+        { shot: 'swim-01-confirm' },
+        { eval: 'window.__hs.debug().closeDialog(); window.__hs.debug().startSwim()' },
+        { wait: 900 },
+        { shot: 'swim-02-cap' },
+        { wait: 1600 },
+        { shot: 'swim-03-jump' },
+        { wait: 1800 },
+        { shot: 'swim-04-swim' },
+        { wait: 3200 },
+        { shot: 'swim-05-regrow' },
+        { wait: 2400 },
+        { shot: 'swim-06-medals' },
+        { click: [270, 630] },
+        { wait: 600 },
+        { shot: 'hub-10-after-swim' },
+        { stats: '去游泳之后' },
+      ],
+    },
+    {
+      name: 'v2-mobile',
       device: MOBILE,
-      url: '',
-      steps: [{ wait: 1400 }, { eval: 'window.__hs.debug().setHubHair(0.3)' }, { wait: 300 }, { shot: 'hub-11-mobile' }],
+      url: '?scene=pool',
+      init: () => localStorage.setItem('hs.save', JSON.stringify({ version: 2, introSeen: true })),
+      steps: [
+        { wait: 1500 },
+        { shot: 'mobile-01-hub' },
+        { click: [270, 520] },
+        { wait: 1400 },
+        { drag: 3, pattern: 'sweep', y: [650, 880] },
+        { shot: 'mobile-02-cut', noWait: true },
+      ],
     },
   ],
 }
@@ -213,7 +185,7 @@ async function toClient(page, lx, ly) {
   return page.evaluate(
     ([x, y]) => {
       const r = window.__hs.game.screen.view.getBoundingClientRect()
-      return [r.left + (x / 360) * r.width, r.top + (y / 640) * r.height]
+      return [r.left + (x / 540) * r.width, r.top + (y / 960) * r.height]
     },
     [lx, ly],
   )
@@ -239,7 +211,7 @@ async function drag(page, step) {
   const [ya, yb] = step.y
   while (Date.now() - t0 < dur) {
     const t = (Date.now() - t0) / 1000
-    const x = 180 + Math.sin(t * 2.6) * 150
+    const x = 270 + Math.sin(t * 2.6) * 230
     const y = ya + (yb - ya) * (0.5 + 0.5 * Math.sin(t * 0.7))
     const [cx, cy] = await toClient(page, x, y)
     await page.mouse.move(cx, cy)
@@ -255,6 +227,7 @@ for (const item of plan) {
     isMobile: !!item.device.mobile,
     hasTouch: !!item.device.mobile,
   })
+  if (item.init) await ctx.addInitScript(item.init)
   const page = await ctx.newPage()
   page.on('console', (m) => {
     // 资源加载失败另外按 URL 判断（外链字体在无网或代理环境下会失败，属于可接受的兜底）

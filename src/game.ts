@@ -5,7 +5,7 @@ import type { Input } from './core/input'
 import type { SceneManager } from './core/scene'
 import type { PerfStats } from './core/perf'
 
-export type SceneName = 'hub' | 'cut' | 'test'
+export type SceneName = 'pool' | 'intro' | 'test'
 
 export interface Game {
   readonly screen: Screen

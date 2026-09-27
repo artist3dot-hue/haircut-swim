@@ -6,6 +6,7 @@
 1. `docs/GDD.md` —— 游戏设计（玩法、数值、系统）
 2. `docs/ART_STYLE.md` —— 美术风格（**只参考画风，不照抄构图**）
 3. `docs/PROGRESS.md` —— 已完成和待做的内容（没有就创建）
+4. `docs/DESIGN_V2.md` —— EDY 试玩后的改版决定（和 GDD 冲突时以它为准）
 
 每次工作结束前，更新 `docs/PROGRESS.md`：做了什么、还差什么、已知问题。
 
@@ -36,7 +37,7 @@ docs/                设计文档、美术指南、参考图、进度
 
 ## 画面与渲染规则
 
-- 逻辑分辨率 **360×640（竖屏 9:16）**，所有像素图按整数倍放大，`imageSmoothingEnabled = false`
+- 逻辑分辨率 **540×960（竖屏 9:16）**（2026-09-27 EDY 要求更精细的画风，从 360×640 提高），所有像素图按整数倍放大，`imageSmoothingEnabled = false`
 - PC 横屏时画面居中，两侧用模糊放大的背景填充，不拉伸
 - 所有坐标取整后再画，保证像素对齐
 - 颜色只从 `src/art/palette.ts` 取（来源：`docs/art-refs/palette_ramps.json`），不要随手写新颜色

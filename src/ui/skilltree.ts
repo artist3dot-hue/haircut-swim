@@ -1,4 +1,4 @@
-// 技能树（在主界面点镜子打开）：从中心"一把剪刀"向外展开 6 个分支。
+// 技能树（在主界面点镜子打开）：从中心向外展开 6 个分支，画在一面大镜子里。
 // 只画出"已买的节点 + 与已买节点相连的节点"，买一个才露出下一个。
 // 节点、连线、镜框画在低分辨率画布；名字、说明画在高清层。
 
@@ -14,11 +14,13 @@ import { sfx } from '../audio/sfx'
 import { panelRect } from './dialog'
 import { drawSprite } from '../art/sprites'
 import { strandIcon } from '../art/hudicons'
+import { ditherFill } from '../art/draw'
 
-const CX = 180
-const CY = 262
-const RING = [0, 70, 128, 180]
-const NODE = 30
+const CX = 270
+const CY = 380
+const RING = [0, 100, 178, 252]
+const NODE = 44
+const FRAME = { x: 14, y: 88, w: W - 28, h: 590 }
 
 const BRANCH_RAMP: Record<Branch, readonly string[]> = {
   root: RAMPS.blade,
@@ -30,14 +32,14 @@ const BRANCH_RAMP: Record<Branch, readonly string[]> = {
   combo: RAMPS.pink,
 }
 
-/** 9×9 小图标：1 = 色阶描边档，2 = 暗部档。 */
+/** 9×9 小图标（放大 3 倍画）：1 = 色阶描边档，2 = 暗部档。 */
 const GLYPH: Record<Branch, readonly string[]> = {
   root: ['1.......1', '.1.....1.', '..1...1..', '...1.1...', '....1....', '...1.1...', '.22...22.', '2..2.2..2', '.22...22.'],
   sharp: ['....1....', '...121...', '...121...', '..12221..', '..12221..', '..12221..', '...121...', '....1....', '....1....'],
   range: ['..11111..', '.1.....1.', '1..222..1', '1.2...2.1', '1.2...2.1', '1.2...2.1', '1..222..1', '.1.....1.', '..11111..'],
   rhythm: ['.....11..', '....11...', '...11....', '..111111.', '.....11..', '....11...', '...11....', '..11.....', '.1.......'],
   harvest: ['...11....', '..1..1...', '.....1...', '....1....', '...1.....', '..1......', '..1....2.', '...1..2..', '....22...'],
-  time: ['..11111..', '.1.....1.', '1...2...1', '1...2...1', '1...222.1', '1.......1', '1.......1', '.1.....1.', '..11111..'],
+  time: ['...1.1...', '..1.1.1..', '..1.1.1..', '.1.1.1.1.', '.1.1.1.1.', '.1.1.1.1.', '.1.1.1.1.', '..2.2.2..', '...2.2...'],
   combo: ['....1....', '....1....', '...111...', '111121111', '.1122211.', '..12221..', '..11.11..', '.11...11.', '.1.....1.'],
 }
 
@@ -64,6 +66,11 @@ function nodePos(s: SkillDef): [number, number] {
   return [Math.round(CX + Math.cos(a) * r), Math.round(CY + Math.sin(a) * r)]
 }
 
+/** 有没有买得起、还没满级、看得见的节点（主界面镜子闪光提示用）。 */
+export function anySkillAffordable(): boolean {
+  return SKILLS.some((s) => s.id !== 'root' && visible(s) && skillLevel(s.id) < s.max && save.hairs >= priceOf(s.id, skillLevel(s.id)))
+}
+
 export class SkillTree {
   isOpen = false
   private selected = 'root'
@@ -76,13 +83,14 @@ export class SkillTree {
   private msg = ''
   private msgT = 0
   onClose: (() => void) | null = null
+  /** 买了东西后通知（重新计算升级） */
+  onBuy: (() => void) | null = null
 
   open(): void {
     this.isOpen = true
     this.age = 0
-    // 默认选中一个买得起的节点，没有就选中心
-    const cand = SKILLS.find((s) => visible(s) && skillLevel(s.id) < s.max && save.hairs >= priceOf(s.id, skillLevel(s.id)))
-    this.selected = cand?.id ?? 'root'
+    const cand = SKILLS.find((s) => s.id !== 'root' && visible(s) && skillLevel(s.id) < s.max && save.hairs >= priceOf(s.id, skillLevel(s.id)))
+    this.selected = cand?.id ?? SKILLS.find((s) => s.id !== 'root' && visible(s) && skillLevel(s.id) < s.max)?.id ?? 'root'
   }
 
   close(): void {
@@ -92,11 +100,11 @@ export class SkillTree {
   }
 
   private backRect(): [number, number, number, number] {
-    return [W - 70, 6, 64, 28]
+    return [W - 118, 26, 100, 46]
   }
 
   private buyRect(): [number, number, number, number] {
-    return [W / 2 - 70, H - 52, 140, 36]
+    return [W / 2 - 110, H - 86, 220, 56]
   }
 
   update(dt: number, taps: Array<{ x: number; y: number }>): void {
@@ -109,7 +117,7 @@ export class SkillTree {
     for (const p of this.sparks) {
       p.x += p.vx * dt
       p.y += p.vy * dt
-      p.vy += 200 * dt
+      p.vy += 260 * dt
       p.life -= dt
     }
     this.sparks = this.sparks.filter((p) => p.life > 0)
@@ -129,7 +137,7 @@ export class SkillTree {
       for (const s of SKILLS) {
         if (!visible(s)) continue
         const [x, y] = nodePos(s)
-        if (Math.abs(tp.x - x) <= NODE / 2 + 4 && Math.abs(tp.y - y) <= NODE / 2 + 4) {
+        if (Math.abs(tp.x - x) <= NODE / 2 + 6 && Math.abs(tp.y - y) <= NODE / 2 + 6) {
           if (this.selected !== s.id) sfx.hover()
           this.selected = s.id
         }
@@ -157,56 +165,48 @@ export class SkillTree {
     sfx.buy()
     this.pop[id] = 0.3
     const [x, y] = nodePos(s)
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2
-      const v = 50 + Math.random() * 60
-      this.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, life: 0.4 + Math.random() * 0.3 })
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2
+      const v = 70 + Math.random() * 90
+      this.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, life: 0.4 + Math.random() * 0.35 })
     }
-    for (const n of SKILLS) if (visible(n) && !before.includes(n.id)) this.reveal[n.id] = 0.45
+    for (const n of SKILLS) if (visible(n) && !before.includes(n.id)) this.reveal[n.id] = 0.5
+    this.onBuy?.()
     return true
   }
 
   render(ctx: CanvasRenderingContext2D, mx: number, my: number): void {
-    // 背景：压暗 + 镜框（gold 色阶）+ 镜面（glass 色阶，斜向反光）
-    ctx.fillStyle = rgba(SCENE.ui.text, 0.88)
+    ctx.fillStyle = rgba(SCENE.ui.text, 0.9)
     ctx.fillRect(0, 0, W, H)
-    const fx = 10
-    const fy = 42
-    const fw = W - 20
-    const fh = 420
     const g = RAMPS.gold
+    const gl = RAMPS.glass
+    const { x: fx, y: fy, w: fw, h: fh } = FRAME
+    // 镜框（金）
     ctx.fillStyle = g[0]
     ctx.fillRect(fx, fy, fw, fh)
-    ctx.fillStyle = g[2]
-    ctx.fillRect(fx + 1, fy + 1, fw - 2, fh - 2)
-    ctx.fillStyle = g[3]
-    ctx.fillRect(fx + 1, fy + 1, fw - 2, 2)
-    ctx.fillRect(fx + 1, fy + 1, 2, fh - 2)
-    ctx.fillStyle = g[1]
-    ctx.fillRect(fx + 1, fy + fh - 3, fw - 2, 2)
-    ctx.fillRect(fx + fw - 3, fy + 1, 2, fh - 2)
+    ditherFill(ctx, fx + 1, fy + 1, fw - 2, fh - 2, [g[1], g[2], g[3]], (x, y) => 0.85 - ((x - fx) / fw) * 0.35 - ((y - fy) / fh) * 0.4)
+    ctx.fillStyle = g[4]
+    ctx.fillRect(fx + 2, fy + 2, fw - 4, 1)
+    ctx.fillRect(fx + 2, fy + 2, 1, fh - 4)
     ctx.fillStyle = g[0]
-    ctx.fillRect(fx + 5, fy + 5, fw - 10, fh - 10)
-    const gl = RAMPS.glass
-    ctx.fillStyle = gl[4]
-    ctx.fillRect(fx + 6, fy + 6, fw - 12, fh - 12)
-    ctx.fillStyle = gl[3]
-    for (let i = 0; i < 3; i++) {
-      const ox = 40 + i * 14
-      for (let y = 0; y < fh - 12; y++) {
-        const x = fx + 6 + ox + Math.round(y * 0.5) - (i === 1 ? 0 : 0)
-        if (x < fx + fw - 6 && y < 150) ctx.fillRect(x, fy + 6 + y, i === 1 ? 4 : 2, 1)
+    ctx.fillRect(fx + 8, fy + 8, fw - 16, fh - 16)
+    // 镜面：上亮下略暗 + 两道斜反光
+    ditherFill(ctx, fx + 9, fy + 9, fw - 18, fh - 18, [gl[4], gl[3]], (_x, y) => ((y - fy) / fh) * 0.7)
+    ctx.fillStyle = rgba(SCENE.hairGlint[1], 0.55)
+    for (let i = 0; i < 2; i++) {
+      for (let y = 0; y < 170; y++) {
+        const x = fx + 40 + i * 22 + Math.round(y * 0.55)
+        ctx.fillRect(x, fy + 12 + y, i === 0 ? 7 : 3, 1)
       }
     }
 
     // 连线
     for (const s of SKILLS) {
       if (!s.parent || !visible(s)) continue
-      const p = SKILL_BY_ID[s.parent]!
-      const [x0, y0] = nodePos(p)
+      const [x0, y0] = nodePos(SKILL_BY_ID[s.parent]!)
       const [x1, y1] = nodePos(s)
       const owned = skillLevel(s.id) >= 1
-      pixelLine(ctx, x0, y0, x1, y1, owned ? g[2] : SCENE.ui.border, owned ? 0 : 3)
+      thickLine(ctx, x0, y0, x1, y1, owned ? g[2] : SCENE.ui.border, owned ? 0 : 4, owned ? 3 : 2)
     }
 
     // 节点
@@ -216,33 +216,38 @@ export class SkillTree {
       const lv = skillLevel(s.id)
       const ramp = BRANCH_RAMP[s.branch]
       const maxed = lv >= s.max
-      const afford = !maxed && save.hairs >= priceOf(s.id, lv)
+      const afford = !maxed && s.id !== 'root' && save.hairs >= priceOf(s.id, lv)
       const rv = this.reveal[s.id] ?? 0
       const prevA = ctx.globalAlpha
-      if (rv > 0) ctx.globalAlpha = 1 - rv / 0.45
-      const big = (this.pop[s.id] ?? 0) > 0 ? 3 : 0
+      if (rv > 0) ctx.globalAlpha = 1 - rv / 0.5
+      const big = (this.pop[s.id] ?? 0) > 0 ? 4 : 0
       const hover = Math.abs(mx - x) <= NODE / 2 && Math.abs(my - y) <= NODE / 2
-      const half = NODE / 2 + big + (hover ? 1 : 0)
-      if (afford && Math.floor(this.t * 3) % 2 === 0) {
-        ctx.fillStyle = g[4]
-        ctx.fillRect(x - half - 2, y - half - 2, half * 2 + 4, half * 2 + 4)
+      const half = NODE / 2 + big + (hover ? 2 : 0)
+      if (afford) {
+        const on = Math.floor(this.t * 3) % 2 === 0
+        ctx.fillStyle = on ? g[4] : g[3]
+        ctx.fillRect(x - half - 4, y - half - 4, half * 2 + 8, half * 2 + 8)
       }
+      ctx.fillStyle = rgba(SCENE.ui.text, 0.3)
+      ctx.fillRect(x - half + 3, y + half, half * 2 - 2, 3)
       ctx.fillStyle = maxed ? g[0] : ramp[0]!
-      ctx.fillRect(x - half, y - half + 1, half * 2, half * 2 - 2)
-      ctx.fillRect(x - half + 1, y - half, half * 2 - 2, half * 2)
-      ctx.fillStyle = maxed ? g[4] : lv > 0 ? ramp[3]! : SCENE.ui.panel
+      ctx.fillRect(x - half, y - half + 2, half * 2, half * 2 - 4)
+      ctx.fillRect(x - half + 2, y - half, half * 2 - 4, half * 2)
       ctx.fillRect(x - half + 1, y - half + 1, half * 2 - 2, half * 2 - 2)
-      // 左上亮边
+      ditherFill(ctx, x - half + 2, y - half + 2, half * 2 - 4, half * 2 - 4, maxed ? [g[3], g[4]] : lv > 0 ? [ramp[2]!, ramp[3]!] : [SCENE.skin[3], SCENE.ui.panel], (xx, yy) => 1 - ((xx - x + half) + (yy - y + half)) / (half * 4))
       ctx.fillStyle = maxed ? SCENE.hairGlint[1] : ramp[4]!
-      ctx.fillRect(x - half + 1, y - half + 1, half * 2 - 3, 1)
-      drawGlyph(ctx, GLYPH[s.branch], x - 9, y - 9, ramp, 2)
+      ctx.fillRect(x - half + 3, y - half + 2, half * 2 - 8, 1)
+      drawGlyph(ctx, GLYPH[s.branch], x - 13, y - 13, ramp, 3)
       if (s.max > 1 && lv > 0) {
-        drawPixelText(ctx, FONT_TINY, `${lv}/${s.max}`, x, y + half + 3, { color: SCENE.ui.text, outline: SCENE.ui.panel, align: 'center' })
+        const txt = `${lv}/${s.max}`
+        const tw = textWidth(FONT_TINY, txt, 2)
+        ctx.fillStyle = SCENE.ui.text
+        ctx.fillRect(x - tw / 2 - 3, y + half + 3, tw + 6, 14)
+        drawPixelText(ctx, FONT_TINY, txt, x, y + half + 5, { color: maxed ? g[4] : SCENE.ui.panel, outline: null, align: 'center', scale: 2 })
       }
       if (this.selected === s.id) {
-        // 选中：四个角的括号，闪
         const c = Math.floor(this.t * 4) % 2 === 0 ? SCENE.ui.text : SCENE.ui.border
-        const o = half + 3
+        const o = half + 7
         ctx.fillStyle = c
         for (const [sx, sy] of [
           [-1, -1],
@@ -250,62 +255,67 @@ export class SkillTree {
           [-1, 1],
           [1, 1],
         ] as const) {
-          ctx.fillRect(x + sx * o - (sx > 0 ? 3 : 0), y + sy * o - (sy > 0 ? 0 : 0), 4, 1)
-          ctx.fillRect(x + sx * o - (sx > 0 ? 0 : 0), y + sy * o - (sy > 0 ? 3 : 0), 1, 4)
+          const cx = x + sx * o
+          const cy = y + sy * o
+          ctx.fillRect(sx < 0 ? cx : cx - 7, cy - (sy > 0 ? 1 : 0), 8, 2)
+          ctx.fillRect(cx - (sx > 0 ? 1 : 0), sy < 0 ? cy : cy - 7, 2, 8)
         }
       }
       ctx.globalAlpha = prevA
     }
     for (const p of this.sparks) {
       ctx.fillStyle = p.life > 0.3 ? g[4] : g[3]
-      ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1)
+      ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2)
     }
 
     // 顶部：发丝数 + 返回
     const text = formatNum(save.hairs)
-    const tw = textWidth(FONT_HUD, text, 2) + 26
-    panelRect(ctx, 4, 6, tw, 28)
-    drawPixelText(ctx, FONT_HUD, text, 22, 13, { color: SCENE.ui.text, outline: null, scale: 2 })
-    drawSprite(ctx, strandIcon(), 7, 13)
+    const tw = textWidth(FONT_HUD, text, 3) + 44
+    panelRect(ctx, 18, 26, tw, 46)
+    drawSprite(ctx, strandIcon(), 26, 34)
+    drawPixelText(ctx, FONT_HUD, text, 52, 38, { color: SCENE.ui.text, outline: null, scale: 3 })
     const [bx, by, bw, bh] = this.backRect()
     panelRect(ctx, bx, by, bw, bh, SCENE.ui.border)
 
-    // 底部：选中节点的说明卡
-    const shake = this.shakeCard > 0 ? Math.round(Math.sin(this.shakeCard * 80) * 3) : 0
-    panelRect(ctx, 10 + shake, 470, W - 20, 162)
+    // 底部：说明卡
+    const shake = this.shakeCard > 0 ? Math.round(Math.sin(this.shakeCard * 80) * 4) : 0
+    panelRect(ctx, 14 + shake, 694, W - 28, 252)
     const s = SKILL_BY_ID[this.selected]!
     const lv = skillLevel(s.id)
-    if (lv < s.max) {
+    if (lv < s.max && s.id !== 'root') {
       const price = priceOf(s.id, lv)
       const afford = save.hairs >= price
       const [ux, uy, uw, uh] = this.buyRect()
       ctx.fillStyle = SCENE.ui.text
-      ctx.fillRect(ux + 1, uy + 2, uw - 2, uh)
-      panelRect(ctx, ux, uy, uw, uh, afford ? SCENE.ui.border : SCENE.floor[2])
+      ctx.fillRect(ux + 1, uy + 3, uw - 2, uh)
+      panelRect(ctx, ux, uy - (mx >= ux && mx <= ux + uw && my >= uy && my <= uy + uh ? 1 : 0), uw, uh, afford ? SCENE.ui.border : SCENE.floor[2])
       const pt = formatNum(price)
-      drawPixelText(ctx, FONT_HUD, pt, W / 2 + 8, 552, { color: afford ? SCENE.ui.text : RAMPS.pink[0], outline: null, scale: 2, align: 'center' })
-      drawSprite(ctx, strandIcon(), W / 2 + 8 - textWidth(FONT_HUD, pt, 2) / 2 - 18, 551)
+      const pw = textWidth(FONT_HUD, pt, 3) + 26
+      drawSprite(ctx, strandIcon(), W / 2 - pw / 2, 816)
+      drawPixelText(ctx, FONT_HUD, pt, W / 2 - pw / 2 + 26, 818, { color: afford ? SCENE.ui.text : RAMPS.pink[0], outline: null, scale: 3 })
     }
   }
 
   overlay(ctx: CanvasRenderingContext2D): void {
     const ui = SCENE.ui
     const [bx, by, bw, bh] = this.backRect()
-    hiText(ctx, S.tree.back, bx + bw / 2, by + bh / 2 + 1, { size: 15, color: ui.panel, align: 'center', baseline: 'middle' })
-    hiText(ctx, S.tree.title, W / 2 + 4, 26, { size: 17, color: ui.panel, stroke: ui.text, strokeWidth: 2, align: 'center' })
+    hiText(ctx, S.tree.back, bx + bw / 2, by + bh / 2 + 1, { size: 20, color: ui.panel, align: 'center', baseline: 'middle' })
+    hiText(ctx, S.tree.title, W / 2 + 30, 58, { size: 24, color: ui.panel, stroke: ui.text, strokeWidth: 3, align: 'center' })
     const s = SKILL_BY_ID[this.selected]!
     const info = S.skills[s.id] ?? { name: s.id, desc: '' }
     const lv = skillLevel(s.id)
-    hiText(ctx, `${info.name}`, 24, 496, { size: 18, color: ui.text })
-    hiText(ctx, `${S.branches[s.branch]} · ${S.tree.level(lv, s.max)}`, W - 24, 496, { size: 12, color: ui.text, align: 'right', alpha: 0.8 })
-    hiText(ctx, info.desc, 24, 522, { size: 13, color: ui.text })
-    if (lv >= s.max) {
-      hiText(ctx, S.tree.maxed, W / 2, 596, { size: 16, color: RAMPS.gold[0], align: 'center' })
+    hiText(ctx, info.name, 36, 736, { size: 26, color: ui.text })
+    hiText(ctx, `${S.branches[s.branch]} · ${S.tree.level(lv, s.max)}`, W - 36, 734, { size: 16, color: ui.text, align: 'right', alpha: 0.8 })
+    hiText(ctx, info.desc, 36, 772, { size: 18, color: ui.text })
+    if (s.id === 'root') {
+      hiText(ctx, S.tree.tapNode, W / 2, 820, { size: 18, color: rgba(ui.text, 0.7), align: 'center' })
+    } else if (lv >= s.max) {
+      hiText(ctx, S.tree.maxed, W / 2, 890, { size: 22, color: RAMPS.gold[0], align: 'center' })
     } else {
       const [ux, uy, uw, uh] = this.buyRect()
-      hiText(ctx, S.tree.buy, ux + uw / 2, uy + uh / 2 + 1, { size: 16, color: ui.panel, align: 'center', baseline: 'middle' })
+      hiText(ctx, S.tree.buy, ux + uw / 2, uy + uh / 2 + 1, { size: 22, color: ui.panel, align: 'center', baseline: 'middle' })
     }
-    if (this.msgT > 0) hiText(ctx, this.msg, W / 2, 470 - 8, { size: 13, color: ui.panel, stroke: ui.text, strokeWidth: 2, align: 'center', alpha: Math.min(1, this.msgT) })
+    if (this.msgT > 0) hiText(ctx, this.msg, W / 2, 686, { size: 18, color: ui.panel, stroke: ui.text, strokeWidth: 3, align: 'center', alpha: Math.min(1, this.msgT) })
   }
 }
 
@@ -322,21 +332,18 @@ function drawGlyph(ctx: CanvasRenderingContext2D, g: readonly string[], x: numbe
   }
 }
 
-/** 1px 像素线（Bresenham），dash > 0 时画虚线。 */
-export function pixelLine(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, color: string, dash = 0): void {
+/** 粗像素线（Bresenham），dash > 0 时画虚线。 */
+function thickLine(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, color: string, dash: number, w: number): void {
   ctx.fillStyle = color
-  x0 = Math.round(x0)
-  y0 = Math.round(y0)
-  x1 = Math.round(x1)
-  y1 = Math.round(y1)
   const dx = Math.abs(x1 - x0)
   const dy = -Math.abs(y1 - y0)
   const sx = x0 < x1 ? 1 : -1
   const sy = y0 < y1 ? 1 : -1
   let err = dx + dy
   let i = 0
+  const o = Math.floor(w / 2)
   for (;;) {
-    if (!dash || Math.floor(i / dash) % 2 === 0) ctx.fillRect(x0, y0, 1, 1)
+    if (!dash || Math.floor(i / dash) % 2 === 0) ctx.fillRect(x0 - o, y0 - o, w, w)
     i++
     if (x0 === x1 && y0 === y1) break
     const e2 = 2 * err
