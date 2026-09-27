@@ -33,13 +33,14 @@ export const HAIR_TYPES: Readonly<Record<HairKind, HairType>> = {
 
 export const HAIR_KINDS = Object.keys(HAIR_TYPES) as HairKind[]
 
-/** 按权重随机一种头发。r ∈ [0, 1)。 */
-export function pickHairKind(r: number): HairKind {
+/** 按权重随机一种头发。r ∈ [0, 1)；rareMult：稀有头发（白发）权重倍率（技能"白发缘"）。 */
+export function pickHairKind(r: number, rareMult = 1): HairKind {
+  const w = (k: HairKind): number => HAIR_TYPES[k].weight * (HAIR_TYPES[k].rare ? rareMult : 1)
   let total = 0
-  for (const k of HAIR_KINDS) total += HAIR_TYPES[k].weight
+  for (const k of HAIR_KINDS) total += w(k)
   let x = r * total
   for (const k of HAIR_KINDS) {
-    x -= HAIR_TYPES[k].weight
+    x -= w(k)
     if (x < 0) return k
   }
   return 'normal'

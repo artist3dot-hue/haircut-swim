@@ -15,7 +15,7 @@ import { SCENE, RAMPS, u32, rgba } from '../art/palette'
 import { drawTiles, drawPoolside } from '../art/pool'
 import { drawScalp } from '../art/scalp'
 import { buildScissors, SCISSOR_FRAMES, type ScissorSprites } from '../art/scissors'
-import { drawSprite, makeCanvas, registerCanvas, type Sprite } from '../art/sprites'
+import { drawSprite, makeCanvas, type Sprite } from '../art/sprites'
 import { drawPixelText, textWidth, FONT_HUD, FONT_TINY } from '../art/pixelfont'
 import { hiText } from '../art/text'
 import { HairField, type Piece, type HairMetrics } from '../hair/field'
@@ -28,9 +28,11 @@ import { JUICE, COMBO_TIERS, comboMult, comboSemitones, type JuiceKey } from '..
 import { HAIR_TYPES, ROUND } from '../data/hair'
 import { S } from '../data/strings'
 import { DebugPanel } from '../ui/debug'
+import { strandIcon, capIcon } from '../art/hudicons'
+import { save, saveGame } from '../core/save'
+import { upgradesFrom, type Upgrades } from '../data/skills'
 
 const FLOOR_Y = ROUND.floorY
-const CAP_Y = ROUND.capY
 /** 计数器位置（光点飞向这里） */
 const COUNTER_X = 12
 const COUNTER_Y = 15
@@ -56,12 +58,9 @@ interface Button {
   action: () => void
 }
 
-// 调试面板和声音解锁在整个页面只建一次（再来一局会新建场景）
+// 调试面板在整个页面只建一次（再来一局会新建场景）
 let debugPanel: DebugPanel | null = null
 let activeScene: CutScene | null = null
-let gestureHooked = false
-/** 这次打开页面以来累计的发丝（阶段 3 做存档后换成存档里的值） */
-let sessionTotal = 0
 
 export class CutScene implements Scene {
   readonly name = 'cut'
@@ -74,6 +73,10 @@ export class CutScene implements Scene {
   private shake = new Shake()
   private scissors: ScissorSprites
   private scissorRadius = -1
+  /** 技能树带来的修正（开局时从存档算一次） */
+  private up: Upgrades = upgradesFrom(save.skills)
+  /** 泳帽线（"大号泳帽"会往下放宽） */
+  private capY: number = ROUND.capY
   private icon: Sprite
   private capIcon: Sprite
 
@@ -92,7 +95,7 @@ export class CutScene implements Scene {
   private hitstop = 0
 
   // 一局
-  private timeLeft: number = ROUND.duration
+  private timeLeft = 0
   private elapsed = 0
   private metrics: HairMetrics = { p80: 0, maxCuttable: 0, onFloor: 0, volume: 0 }
   private danger = 0
@@ -132,12 +135,14 @@ export class CutScene implements Scene {
   constructor(private readonly game: Game) {
     const seed = Number(new URLSearchParams(location.search).get('seed'))
     this.rng = new Rng(Number.isFinite(seed) && seed > 0 ? seed + restarts * 7919 : undefined)
-    this.field = new HairField(this.rng.int(1, 1e9), FLOOR_Y)
+    this.capY = ROUND.capY + this.up.capLower
+    this.timeLeft = ROUND.duration + this.up.time
+    this.field = new HairField(this.rng.int(1, 1e9), FLOOR_Y, { rareMult: this.up.rareMult, knotEase: this.up.knotEase })
     this.field.maxStrandMult = ROUND.maxStrandMult
     this.bg = makeBackground()
     this.scissors = this.ensureScissors()
-    this.icon = makeStrandIcon()
-    this.capIcon = makeCapIcon()
+    this.icon = strandIcon()
+    this.capIcon = capIcon()
     activeScene = this
     if (!debugPanel) {
       debugPanel = new DebugPanel(
@@ -145,16 +150,24 @@ export class CutScene implements Scene {
         () => activeScene?.statsText() ?? {},
       )
     }
-    if (!gestureHooked) {
-      gestureHooked = true
-      game.input.onGesture(() => sfx.unlock())
-    }
     game.input.consumeTaps()
-    this.metrics = this.field.metrics(CAP_Y, ROUND.sharpness)
+    this.metrics = this.field.metrics(this.capY, this.up.sharpness)
+  }
+
+  private radius(): number {
+    return JUICE.scissorRadius + this.up.radius
+  }
+
+  private thickness(): number {
+    return JUICE.cutThickness + this.up.thickness
+  }
+
+  private snapInterval(): number {
+    return JUICE.snapInterval * this.up.snapMult
   }
 
   private ensureScissors(): ScissorSprites {
-    const r = Math.round(JUICE.scissorRadius)
+    const r = Math.round(this.radius())
     if (r !== this.scissorRadius) {
       this.scissors = buildScissors(r, SCENE.tile[3])
       this.scissorRadius = r
@@ -178,7 +191,10 @@ export class CutScene implements Scene {
       ]
     }
     if (p === 'result') {
-      this.buttons = [{ x: 70, y: 440, w: 220, h: 42, label: S.round.again, primary: true, action: () => this.restart() }]
+      this.buttons = [
+        { x: 50, y: 440, w: 124, h: 42, label: S.round.toHub, primary: true, action: () => this.game.goto('hub') },
+        { x: 186, y: 440, w: 124, h: 42, label: S.round.again, primary: false, action: () => this.restart() },
+      ]
     }
   }
 
@@ -227,7 +243,7 @@ export class CutScene implements Scene {
     ty = Math.max(50, Math.min(FLOOR_Y - 4, ty))
     this.psx = this.sx
     this.psy = this.sy
-    const k = 1 - Math.exp(-JUICE.followSharpness * dt)
+    const k = 1 - Math.exp(-(JUICE.followSharpness + this.up.follow) * dt)
     this.sx += (tx - this.sx) * k
     this.sy += (ty - this.sy) * k
     this.recoil *= Math.exp(-dt * 18)
@@ -237,8 +253,8 @@ export class CutScene implements Scene {
       const push = this.field.push
       push.cx = this.sx
       push.cy = this.sy
-      push.halfW = JUICE.scissorRadius + JUICE.pushRange
-      push.halfH = JUICE.cutThickness + JUICE.pushRange
+      push.halfW = this.radius() + JUICE.pushRange
+      push.halfH = this.thickness() + JUICE.pushRange
       push.mvx = this.sx - this.psx
       push.mvy = this.sy - this.psy
       push.strength = this.phase === 'play' ? JUICE.pushStrength : 0
@@ -299,7 +315,7 @@ export class CutScene implements Scene {
     if (this.phase === 'drown') return JUICE.growthSpeed * 14
     if (this.phase === 'ready') return JUICE.growthSpeed * 0.3
     const ramp = 1 + this.elapsed / ROUND.growthRampSec
-    return JUICE.growthSpeed * ramp * (this.extraMode ? ROUND.extraGrowthMult : 1)
+    return JUICE.growthSpeed * this.up.growthMult * ramp * (this.extraMode ? ROUND.extraGrowthMult : 1)
   }
 
   private updatePlay(dt: number): void {
@@ -308,15 +324,16 @@ export class CutScene implements Scene {
 
     // 自动咔嚓
     this.sinceSnap += dt
-    if (this.sinceSnap >= JUICE.snapInterval) {
-      this.sinceSnap = Math.min(this.sinceSnap - JUICE.snapInterval, JUICE.snapInterval)
+    const iv = this.snapInterval()
+    if (this.sinceSnap >= iv) {
+      this.sinceSnap = Math.min(this.sinceSnap - iv, iv)
       this.doSnap()
     }
 
     // 发量 / 爆表 / 泳帽线
-    this.metrics = this.field.metrics(CAP_Y, ROUND.sharpness)
+    this.metrics = this.field.metrics(this.capY, this.up.sharpness)
     const m = this.metrics
-    this.danger = Math.max(0, Math.min(1, (m.p80 - CAP_Y) / (FLOOR_Y - CAP_Y)))
+    this.danger = Math.max(0, Math.min(1, (m.p80 - this.capY) / (FLOOR_Y - this.capY)))
     const warn = this.warnLevel()
     if (warn > 0) {
       // 危险预兆：心跳越来越快
@@ -331,7 +348,7 @@ export class CutScene implements Scene {
       return
     }
     if (!this.capReached) {
-      if (m.maxCuttable <= CAP_Y) this.capHold += dt
+      if (m.maxCuttable <= this.capY) this.capHold += dt
       else this.capHold = 0
       if (this.capHold >= ROUND.capHoldSec) {
         this.capReached = true
@@ -382,14 +399,22 @@ export class CutScene implements Scene {
   private toResult(): void {
     const factor = this.endReason === 'drown' ? ROUND.overflowPayout : 1
     this.payout = this.bank * factor
-    sessionTotal += this.payout
+    save.hairs += this.payout
+    save.totalHairs += this.payout
+    save.rounds++
+    save.bestCombo = Math.max(save.bestCombo, this.maxCombo)
+    if (this.capReached) save.swimUnlocked = true
+    save.lastEnd = this.endReason
+    // 回到主界面时阿发的头发：剪到泳帽线 → 很短（心疼），爆表 → 拖满地（慌张），否则看剩多少
+    save.hubHair = this.endReason === 'drown' ? 1 : this.capReached ? 0.1 : Math.max(0.2, Math.min(0.9, 0.15 + this.danger * 0.8))
+    saveGame()
     this.shown = this.bank
     this.setPhase('result')
   }
 
   private restart(): void {
     restarts++
-    this.game.scenes.set(new CutScene(this.game))
+    this.game.goto('cut')
   }
 
   private breakCombo(): void {
@@ -401,7 +426,7 @@ export class CutScene implements Scene {
   private doSnap(): void {
     this.snaps++
     this.snapFlash = 0.06
-    const hits = this.field.snap(this.sx, this.sy, JUICE.scissorRadius, JUICE.cutThickness, ROUND.sharpness, this.rng)
+    const hits = this.field.snap(this.sx, this.sy, this.radius(), this.thickness(), this.up.sharpness, this.rng)
     if (hits.length === 0) {
       sfx.emptySnap()
       return
@@ -421,7 +446,7 @@ export class CutScene implements Scene {
         continue
       }
       this.combo++
-      this.comboTimer = JUICE.comboTimeout
+      this.comboTimer = JUICE.comboTimeout + this.up.grace
       if (h.kind === 'knot') {
         // 打结发：剪了一下没断
         sfx.thud()
@@ -432,7 +457,11 @@ export class CutScene implements Scene {
       const type = HAIR_TYPES[piece.kind]
       this.cuts++
       this.everCut = true
-      const value = ROUND.baseValue * type.value * comboMult(this.combo) * (this.extraMode ? ROUND.extraValueMult : 1)
+      // 连击倍率：档位带来的额外部分再乘"连击大师"
+      const cm = 1 + (comboMult(this.combo) - 1) * this.up.comboMult
+      const crit = this.rng.chance(this.up.crit)
+      const value = ROUND.baseValue * type.value * cm * this.up.valueMult * (this.extraMode ? ROUND.extraValueMult : 1) * (crit ? 5 : 1)
+      if (crit) this.floaters.add('x5', h.x, h.y - 14, { life: 0.8, rise: 22, scale: 2, color: RAMPS.gold[3], big: true })
       piece.value = value
       total += value
       this.bank += value
@@ -466,7 +495,7 @@ export class CutScene implements Scene {
     // 一下剪断很多根：剪刀上方再出一个总数
     if (cutsNow >= 3) {
       const style = floaterStyle(this.combo)
-      this.floaters.add('+' + formatNum(total), this.sx, this.sy - JUICE.cutThickness - 16, {
+      this.floaters.add('+' + formatNum(total), this.sx, this.sy - this.thickness() - 16, {
         life: JUICE.floaterTime * 1.3,
         rise: JUICE.floaterRise * 1.2,
         scale: style.scale,
@@ -476,7 +505,7 @@ export class CutScene implements Scene {
       })
     }
     if (rare) this.hitstop = JUICE.hitstopRare
-    if (cutsNow > 0 && navigator.vibrate && this.game.input.pointerType !== 'mouse') {
+    if (cutsNow > 0 && save.settings.vibrate && navigator.vibrate && this.game.input.pointerType !== 'mouse') {
       try {
         navigator.vibrate(rare ? JUICE.vibrateRareMs : JUICE.vibrateMs)
       } catch {
@@ -560,17 +589,17 @@ export class CutScene implements Scene {
     for (let x = 22 - off; x < BAR_X - 4; x += 6) {
       if (x < 22) continue
       ctx.fillStyle = bright ? c[4] : c[3]
-      ctx.fillRect(x, CAP_Y, 3, 1)
+      ctx.fillRect(x, this.capY, 3, 1)
       ctx.fillStyle = c[0]
-      ctx.fillRect(x, CAP_Y + 1, 3, 1)
+      ctx.fillRect(x, this.capY + 1, 3, 1)
     }
-    drawSprite(ctx, this.capIcon, 3, CAP_Y - 6)
+    drawSprite(ctx, this.capIcon, 3, this.capY - 6)
     if (holding) {
       const k = Math.min(1, this.capHold / ROUND.capHoldSec)
       ctx.fillStyle = c[0]
-      ctx.fillRect(22, CAP_Y + 3, 102, 4)
+      ctx.fillRect(22, this.capY + 3, 102, 4)
       ctx.fillStyle = RAMPS.gold[3]
-      ctx.fillRect(23, CAP_Y + 4, Math.round(100 * k), 2)
+      ctx.fillRect(23, this.capY + 4, Math.round(100 * k), 2)
     }
   }
 
@@ -640,7 +669,7 @@ export class CutScene implements Scene {
 
   private openness(): number {
     if (this.phase !== 'play') return 1
-    const iv = JUICE.snapInterval
+    const iv = this.snapInterval()
     const close = Math.min(JUICE.snapCloseTime, iv * 0.4)
     const τ = this.sinceSnap
     if (τ > iv - close) return Math.max(0, (iv - τ) / close)
@@ -657,7 +686,7 @@ export class CutScene implements Scene {
       for (let i = this.trail.length - 1; i >= 1; i--) {
         const [ax, ay] = this.trail[i]!
         ctx.fillStyle = rb[(i + Math.floor(this.t * 20)) % rb.length]!
-        const w = Math.max(1, Math.round((1 - i / this.trail.length) * JUICE.scissorRadius * 1.6))
+        const w = Math.max(1, Math.round((1 - i / this.trail.length) * this.radius() * 1.6))
         ctx.fillRect(Math.round(ax - w / 2), Math.round(ay), w, 1)
       }
     }
@@ -743,7 +772,7 @@ export class CutScene implements Scene {
       const m = comboMult(this.combo)
       if (m > 1) drawPixelText(ctx, FONT_TINY, `x${m}`, W / 2 + textWidth(FONT_HUD, `${this.combo}`, 3) / 2 + 10, cy + 12, { color: RAMPS.gold[4], outline: SCENE.ui.text, scale: 2, align: 'center' })
       const bw = 60
-      const k = Math.max(0, this.comboTimer / JUICE.comboTimeout)
+      const k = Math.max(0, this.comboTimer / (JUICE.comboTimeout + this.up.grace))
       ctx.fillStyle = SCENE.ui.text
       ctx.fillRect(W / 2 - bw / 2 - 1, cy + 26, bw + 2, 4)
       ctx.fillStyle = style.color
@@ -766,7 +795,7 @@ export class CutScene implements Scene {
    * 深色填充到 80% 分位的末端（碰到底就爆表），亮线是最长那根能剪的头发。
    */
   private drawVolumeBar(ctx: CanvasRenderingContext2D): void {
-    const top = CAP_Y
+    const top = this.capY
     const bottom = FLOOR_Y
     const warn = this.warnLevel()
     const blink = warn > 0.5 && Math.floor(this.t * 6) % 2 === 0
@@ -810,7 +839,7 @@ export class CutScene implements Scene {
       const rows: Array<[number, string]> = [
         [300, formatNum(this.maxCombo)],
         [330, formatNum(this.cuts)],
-        [360, formatNum(sessionTotal)],
+        [360, formatNum(save.hairs)],
       ]
       for (const [y, v] of rows) drawPixelText(ctx, FONT_HUD, v, W - 60, y - 10, { color: SCENE.ui.text, outline: null, scale: 2, align: 'right' })
     }
@@ -837,7 +866,7 @@ export class CutScene implements Scene {
       hiText(ctx, S.cut.debugHint, W / 2, 494, { size: 12, color: ui.panel, stroke: ui.text, strokeWidth: 2, align: 'center', alpha: 0.85 })
     }
     if (this.capHold > 0 && this.phase === 'play' && !this.capReached) {
-      hiText(ctx, S.round.holdCap(ROUND.capHoldSec - this.capHold), 130, CAP_Y + 11, { size: 12, color: ui.panel, stroke: ui.text, strokeWidth: 2 })
+      hiText(ctx, S.round.holdCap(ROUND.capHoldSec - this.capHold), 130, this.capY + 11, { size: 12, color: ui.panel, stroke: ui.text, strokeWidth: 2 })
     }
     if (this.phase === 'drown' && this.phaseT > 0.7) {
       const a = Math.min(1, (this.phaseT - 0.7) / 0.3)
@@ -902,7 +931,7 @@ export class CutScene implements Scene {
   /** 给测试脚本用的后门。 */
   debugApi(): Record<string, (...a: number[]) => unknown> {
     return {
-      trimAll: (y = CAP_Y - 60) => this.field.trimAll(y, ROUND.sharpness),
+      trimAll: (y = this.capY - 60) => this.field.trimAll(y, this.up.sharpness),
       growAll: (px = 400) => this.field.growAll(px),
       setTime: (sec = 3) => {
         this.timeLeft = sec
@@ -936,63 +965,3 @@ function hudCanvas(w: number, h: number): { c: HTMLCanvasElement; ctx: CanvasRen
   return hudTmp
 }
 
-/** 计数器图标：一小束弯弯的头发（深发色 + 蓝灰高光），描边用 UI 深青（14×14）。 */
-function makeStrandIcon(): Sprite {
-  const { c, ctx } = makeCanvas(14, 14)
-  const hair = SCENE.hair
-  const shape = [
-    '...#####......',
-    '..#11221#.....',
-    '..#12321#.....',
-    '...#1221#.....',
-    '....#1221#....',
-    '....#1221#....',
-    '...#1221#.....',
-    '..#1221#......',
-    '..#1221#......',
-    '...#1221#.....',
-    '....#1221#....',
-    '....#12#1#....',
-    '...#1#.#1#....',
-    '...##...##....',
-  ]
-  drawShape(ctx, shape, { '#': SCENE.ui.text, '1': hair[0], '2': hair[2], '3': hair[4] })
-  ctx.fillStyle = SCENE.hairGlint[0]
-  ctx.fillRect(6, 3, 1, 1)
-  ctx.fillRect(9, 7, 1, 1)
-  return registerCanvas('hud.strand', c, 0, 0)
-}
-
-/** 泳帽线上的小泳帽（16×11，bcap 色阶，描边用自身最深档）。 */
-function makeCapIcon(): Sprite {
-  const { c, ctx } = makeCanvas(16, 11)
-  const shape = [
-    '.....######.....',
-    '...##443322##...',
-    '..#4433322222#..',
-    '.#443332222221#.',
-    '.#433222222211#.',
-    '#43322222222111#',
-    '#33222222221111#',
-    '################',
-    '#5151515151515.#',
-    '#1111111111111.#',
-    '.##############.',
-  ]
-  const r = RAMPS.bcap
-  const b = RAMPS.bband
-  drawShape(ctx, shape, { '#': r[0], '1': r[1], '2': r[2], '3': r[3], '4': r[4], '5': b[3] })
-  return registerCanvas('hud.cap', c, 0, 0)
-}
-
-function drawShape(ctx: CanvasRenderingContext2D, shape: readonly string[], col: Record<string, string>): void {
-  shape.forEach((row, y) => {
-    for (let x = 0; x < row.length; x++) {
-      const k = row[x]!
-      const cc = col[k]
-      if (!cc) continue
-      ctx.fillStyle = cc
-      ctx.fillRect(x, y, 1, 1)
-    }
-  })
-}

@@ -25,6 +25,8 @@ export class Sfx {
   private tickLast = 0
   private lastClang = 0
   private lastThud = 0
+  /** 玩家设置的音量 0..1（存档里），乘在 JUICE.masterVolume 上 */
+  volume = 0.8
   /** 统计：播放 / 并入底噪的剪断音数量 */
   snipsPlayed = 0
   snipsMerged = 0
@@ -40,7 +42,7 @@ export class Sfx {
     const ctx = new AC()
     this.ctx = ctx
     const master = ctx.createGain()
-    master.gain.value = JUICE.masterVolume
+    master.gain.value = JUICE.masterVolume * this.volume
     // 轻压一下，避免很多声音叠在一起爆音
     const comp = ctx.createDynamicsCompressor()
     comp.threshold.value = -14
@@ -87,7 +89,7 @@ export class Sfx {
   tick(dt: number): void {
     const ctx = this.ctx
     if (!ctx || !this.master) return
-    this.master.gain.setTargetAtTime(JUICE.masterVolume, ctx.currentTime, 0.05)
+    this.master.gain.setTargetAtTime(JUICE.masterVolume * this.volume, ctx.currentTime, 0.05)
     this.rustleEnergy *= Math.exp(-dt * 3.2)
     if (this.rustleGain) {
       const v = Math.min(0.22, Math.sqrt(this.rustleEnergy) * 0.06)
@@ -399,6 +401,53 @@ export class Sfx {
     const t = ctx.currentTime + 0.01
     this.tone(784, t, 0.1, 0.18, 'square')
     this.tone(523.25, t + 0.2, 0.1, 0.4, 'square')
+  }
+
+  /** 买技能：硬币叮当 + 上扬。 */
+  buy(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.005
+    this.tone(1568, t, 0.08, 0.12, 'square')
+    this.tone(2093, t + 0.06, 0.08, 0.3, 'square')
+    this.tone(3136, t + 0.06, 0.04, 0.25)
+  }
+
+  /** 钱不够：低低的"嗡"。 */
+  deny(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.005
+    this.tone(150, t, 0.12, 0.14, 'square', 110)
+  }
+
+  /** 场景切换：一阵"唰"。 */
+  whoosh(): void {
+    const ctx = this.ctx
+    if (!ctx || !this.master || !this.noise) return
+    const t = ctx.currentTime + 0.005
+    const n = ctx.createBufferSource()
+    n.buffer = this.noise
+    const bp = ctx.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.Q.value = 1.2
+    bp.frequency.setValueAtTime(600, t)
+    bp.frequency.exponentialRampToValueAtTime(4000, t + 0.3)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, t)
+    g.gain.linearRampToValueAtTime(0.12, t + 0.12)
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4)
+    n.connect(bp)
+    bp.connect(g)
+    g.connect(this.master)
+    n.start(t, Math.random() * 0.5, 0.45)
+  }
+
+  /** 鼠标移到可点的物件上：很轻的"嘀"。 */
+  hover(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    this.tone(2400, ctx.currentTime + 0.002, 0.025, 0.04, 'sine')
   }
 
   /** 按钮点击。 */

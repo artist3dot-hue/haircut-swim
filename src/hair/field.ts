@@ -86,6 +86,8 @@ export class HairField {
   constructor(
     seed: number,
     readonly floorY: number,
+    /** 技能带来的修正：白发权重倍率、打结发少剪几下 */
+    private readonly mods: { rareMult: number; knotEase: number } = { rareMult: 1, knotEase: 0 },
   ) {
     this.rng = new Rng(seed)
     this.p = this.params()
@@ -124,7 +126,7 @@ export class HairField {
 
   private setKind(s: Strand, kind: HairKind): void {
     s.kind = kind
-    s.hitsLeft = HAIR_TYPES[kind].hits
+    s.hitsLeft = Math.max(1, HAIR_TYPES[kind].hits - (kind === 'knot' ? this.mods.knotEase : 0))
     // 结打在当前长度靠下 1/3 处，跟着头发走（材料坐标）
     s.knotMat = s.emitted - s.length * 0.6
   }
@@ -139,7 +141,7 @@ export class HairField {
     for (let k = 0; k < count; k++) {
       // 根部沿头皮均匀分布 + 抖动
       const x = 4 + ((k + rng.range(0.1, 0.9)) / count) * 352
-      const kind = pickHairKind(rng.next())
+      const kind = pickHairKind(rng.next(), this.mods.rareMult)
       // 特殊头发都放前层，看得清
       const back = kind === 'normal' && rng.chance(JUICE.backRatio)
       const len = rng.range(JUICE.startLenMin, JUICE.startLenMax)

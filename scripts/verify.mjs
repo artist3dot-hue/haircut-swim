@@ -120,7 +120,70 @@ const PLANS = {
       steps: [{ wait: 1200 }, { click: [180, 560] }, { drag: 3, pattern: 'sweep', y: [140, 380] }, { shot: 'round-10-mobile', noWait: true }],
     },
   ],
-  3: [],
+  3: [
+    {
+      name: 'hub-desktop',
+      device: DESKTOP_1080,
+      url: '',
+      steps: [
+        { wait: 1400 },
+        { shot: 'hub-00-first-visit' },
+        // 点一下空墙解锁声音（点泳池会打开泳池弹窗）
+        { click: [180, 240] },
+        { drag: 0.5, from: [120, 300], to: [68, 118] },
+        { wait: 150 },
+        { shot: 'hub-01-hover-mirror' },
+        { eval: 'window.__hs.debug().addHairs(20000)' },
+        { click: [68, 118] },
+        { wait: 500 },
+        { shot: 'hub-02-skill-tree' },
+        // 买：范围（上）、收获（右下）×2、时间（下）
+        { click: [180, 192] },
+        { click: [180, 606] },
+        { click: [241, 297] },
+        { click: [180, 606] },
+        { click: [180, 606] },
+        { click: [180, 332] },
+        { click: [180, 606] },
+        { wait: 200 },
+        { shot: 'hub-03-tree-bought' },
+        { stats: '买完技能' },
+        { click: [322, 20] },
+        { wait: 400 },
+        { click: [320, 400] },
+        { wait: 400 },
+        { shot: 'hub-04-settings' },
+        { click: [180, 470] },
+        { eval: 'window.__hs.debug().setHubHair(0.95)' },
+        { drag: 0.4, from: [180, 560], to: [180, 600] },
+        { shot: 'hub-05-panic' },
+        { click: [180, 380] },
+        { wait: 280 },
+        { shot: 'hub-06-transition', noWait: true },
+        { wait: 900 },
+        { drag: 2, pattern: 'sweep', y: [150, 420] },
+        { shot: 'hub-07-cut-upgraded', noWait: true },
+        { stats: '升级后的一局' },
+        { eval: 'window.__hs.debug().setTime(1)' },
+        { wait: 3200 },
+        { shot: 'hub-08-result' },
+        { click: [112, 461] },
+        { wait: 1300 },
+        { shot: 'hub-09-back-home' },
+        { stats: '回到主界面' },
+        { reload: true },
+        { wait: 1400 },
+        { stats: '刷新页面后（存档）' },
+        { shot: 'hub-10-reloaded' },
+      ],
+    },
+    {
+      name: 'hub-mobile',
+      device: MOBILE,
+      url: '',
+      steps: [{ wait: 1400 }, { eval: 'window.__hs.debug().setHubHair(0.3)' }, { wait: 300 }, { shot: 'hub-11-mobile' }],
+    },
+  ],
 }
 
 const plan = PLANS[stage]
@@ -211,6 +274,10 @@ for (const item of plan) {
   await page.waitForFunction(() => !!window.__hs, null, { timeout: 15000 })
   for (const step of item.steps) {
     if (step.wait) await page.waitForTimeout(step.wait)
+    if (step.reload) {
+      await page.reload({ waitUntil: 'load' })
+      await page.waitForFunction(() => !!window.__hs, null, { timeout: 15000 })
+    }
     if (step.resetPerf) await page.evaluate(() => window.__hs.resetPerf())
     if (step.drag) await drag(page, step)
     if (step.key) await page.keyboard.press(step.key === '`' ? 'Backquote' : step.key)
