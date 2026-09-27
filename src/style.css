@@ -19,7 +19,8 @@ body {
   overflow: hidden;
 }
 
-/* 两侧的模糊背景：一张很小的画面截图，放大 + 模糊 */
+/* 两侧的模糊背景：一张 18×32 的小截图，浏览器双线性放大后自然就是模糊的。
+   不用 CSS filter: blur()——它在没有 GPU 的机器上每帧要花几十毫秒。 */
 canvas.bg {
   position: absolute;
   left: -10%;
@@ -27,7 +28,6 @@ canvas.bg {
   width: 120%;
   height: 120%;
   object-fit: cover;
-  filter: blur(22px) brightness(0.72) saturate(1.1);
   image-rendering: auto;
 }
 

@@ -10,6 +10,10 @@
 // 中文字不画进低分辨率画布（会糊成一团），而是在放大后的屏幕画布上按同一坐标系
 // 直接高清绘制，见 overlay()。
 
+import { SCENE } from '../art/palette'
+
+const BACKDROP_DIM = SCENE.ui.text
+
 export const W = 360
 export const H = 640
 
@@ -41,8 +45,8 @@ export class Screen {
 
     this.bg = document.createElement('canvas')
     this.bg.className = 'bg'
-    this.bg.width = 36
-    this.bg.height = 64
+    this.bg.width = 18
+    this.bg.height = 32
     this.bctx = ctx2d(this.bg, false)
     this.bctx.imageSmoothingEnabled = true
     root.appendChild(this.bg)
@@ -123,12 +127,19 @@ export class Screen {
     return this.vctx
   }
 
-  /** 每隔一小段时间刷新背后的模糊画面（很便宜：只画一张 36×64 的小图）。 */
+  /** 每隔一小段时间刷新背后的模糊画面（很便宜：只画一张 18×32 的小图）。 */
   tickBackdrop(dt: number, force = false): void {
     this.bgTimer -= dt
     if (this.bgTimer > 0 && !force) return
     this.bgTimer = 0.25
-    this.bctx.drawImage(this.low, 0, 0, this.bg.width, this.bg.height)
+    const b = this.bctx
+    b.globalAlpha = 1
+    b.drawImage(this.low, 0, 0, this.bg.width, this.bg.height)
+    // 压暗一点，让中间的游戏画面更突出（颜色取 UI 深青）
+    b.globalAlpha = 0.32
+    b.fillStyle = BACKDROP_DIM
+    b.fillRect(0, 0, this.bg.width, this.bg.height)
+    b.globalAlpha = 1
   }
 
   /** 屏幕坐标（clientX/Y）→ 逻辑坐标。 */

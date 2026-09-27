@@ -63,7 +63,7 @@ export const JUICE = {
   /** 飘字上飘距离 */
   floaterRise: 18,
   /** 一次咔嚓最多几个单根飘字（其余合进总数飘字） */
-  floaterMaxPerSnap: 6,
+  floaterMaxPerSnap: 4,
   /** 每段断发落地后变成几个光点 */
   sparksPerPiece: 1,
   /** 光点飞向计数器的时间 */

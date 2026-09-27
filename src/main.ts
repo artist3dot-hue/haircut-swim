@@ -10,6 +10,7 @@ import { loadSpriteFiles } from './art/sprites'
 import { loadFonts } from './art/text'
 import { allText } from './data/strings'
 import { TestScene } from './scenes/test'
+import { CutScene } from './scenes/cut'
 import type { Game } from './game'
 
 async function boot(): Promise<void> {
@@ -23,7 +24,10 @@ async function boot(): Promise<void> {
 
   await Promise.all([loadSpriteFiles(), loadFonts(allText())])
 
-  scenes.set(new TestScene(game))
+  // 按 ?scene= 进入场景；还没有主界面（阶段 3），默认进剪发画面
+  const which = new URLSearchParams(location.search).get('scene') ?? 'cut'
+  const cut = which === 'test' ? null : new CutScene(game)
+  scenes.set(cut ?? new TestScene(game))
 
   const loop = new FixedLoop(
     (dt) => scenes.update(dt),
@@ -46,6 +50,7 @@ async function boot(): Promise<void> {
     perfTotals: () => ({ frames: perf.totalFrames, avgFrameMs: perf.totalFrameMs / Math.max(1, perf.totalFrames), avgCpuMs: perf.totalCpuMs / Math.max(1, perf.totalFrames), worstFrameMs: perf.worstFrameMs }),
     resetPerf: () => perf.resetTotals(),
     scene: () => scenes.current?.name,
+    stats: () => cut?.stats() ?? null,
   }
 }
 

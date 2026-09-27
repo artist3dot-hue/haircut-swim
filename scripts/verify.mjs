@@ -36,6 +36,8 @@ const PLANS = {
       steps: [
         { wait: 1200 },
         { shot: 'cut-00-start' },
+        // 点一下：解锁声音（浏览器要求用户手势）
+        { click: [180, 560] },
         { resetPerf: true },
         { drag: 1.2, from: [60, 330], to: [300, 360] },
         { shot: 'cut-01-first-cuts', noWait: true },
@@ -53,7 +55,7 @@ const PLANS = {
       name: 'cut-mobile',
       device: MOBILE,
       url: '?scene=cut&seed=11',
-      steps: [{ wait: 1200 }, { drag: 3, pattern: 'sweep', y: [260, 480] }, { shot: 'cut-05-mobile', noWait: true }],
+      steps: [{ wait: 1200 }, { click: [180, 560] }, { drag: 3, pattern: 'sweep', y: [260, 480] }, { shot: 'cut-05-mobile', noWait: true }],
     },
   ],
   2: [
