@@ -50,7 +50,8 @@ async function boot(): Promise<void> {
     perfTotals: () => ({ frames: perf.totalFrames, avgFrameMs: perf.totalFrameMs / Math.max(1, perf.totalFrames), avgCpuMs: perf.totalCpuMs / Math.max(1, perf.totalFrames), worstFrameMs: perf.worstFrameMs }),
     resetPerf: () => perf.resetTotals(),
     scene: () => scenes.current?.name,
-    stats: () => cut?.stats() ?? null,
+    stats: () => (scenes.current instanceof CutScene ? scenes.current.stats() : null),
+    debug: () => (scenes.current instanceof CutScene ? scenes.current.debugApi() : null),
   }
 }
 

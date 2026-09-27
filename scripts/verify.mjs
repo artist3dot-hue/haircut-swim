@@ -66,11 +66,58 @@ const PLANS = {
       steps: [
         { wait: 1200 },
         { shot: 'round-00-start' },
+        { click: [180, 560] },
         { resetPerf: true },
         { drag: 10, pattern: 'sweep', y: [150, 520] },
         { perf: '一局中拖动 10 秒' },
         { shot: 'round-01-mid', noWait: true },
+        // 头发一下长很多 → 危险预兆（边缘被头发侵占、发量条闪）
+        // 剪刀先挪到左下角，别把刚长出来的头发剪掉
+        { drag: 0.3, from: [4, 600], to: [4, 600] },
+        { eval: 'window.__hs.debug().growAll(260)' },
+        { drag: 0.6, from: [4, 600], to: [6, 600] },
+        { shot: 'round-02-warning', noWait: true },
+        // 再长 → 爆表 → 被头发淹没
+        { eval: 'window.__hs.debug().growAll(400)' },
+        { stats: '长头发后' },
+        { wait: 1100 },
+        { shot: 'round-03-drown', noWait: true },
+        { wait: 1400 },
+        { shot: 'round-04-result-drown', noWait: true },
+        { stats: '爆表后' },
       ],
+    },
+    {
+      name: 'round-cap',
+      device: DESKTOP,
+      url: '?scene=cut&seed=9',
+      steps: [
+        { wait: 1000 },
+        { click: [180, 560] },
+        { drag: 1.5, pattern: 'sweep', y: [200, 300] },
+        // 把能剪的头发都剪到泳帽线以上，等 3 秒 → "可以去游泳了！"
+        { eval: 'window.__hs.debug().trimAll()' },
+        { drag: 1.6, from: [180, 560], to: [200, 560] },
+        { shot: 'round-05-holding', noWait: true },
+        { wait: 2200 },
+        { shot: 'round-06-cap-prompt' },
+        { click: [180, 418] },
+        { drag: 2, pattern: 'sweep', y: [150, 400] },
+        { shot: 'round-07-keep-cutting', noWait: true },
+        { eval: 'window.__hs.debug().setTime(1.2)' },
+        { wait: 3000 },
+        { shot: 'round-08-result-time' },
+        { stats: '时间到后' },
+        { click: [180, 461] },
+        { wait: 500 },
+        { shot: 'round-09-again' },
+      ],
+    },
+    {
+      name: 'round-mobile',
+      device: MOBILE,
+      url: '?scene=cut&seed=11',
+      steps: [{ wait: 1200 }, { click: [180, 560] }, { drag: 3, pattern: 'sweep', y: [140, 380] }, { shot: 'round-10-mobile', noWait: true }],
     },
   ],
   3: [],
@@ -179,6 +226,10 @@ for (const item of plan) {
       )
       const extra = await page.evaluate(() => (window.__hs.stats ? window.__hs.stats() : null))
       if (extra) console.log(`[统计] ${JSON.stringify(extra)}`)
+    }
+    if (step.stats) {
+      const st = await page.evaluate(() => (window.__hs.stats ? window.__hs.stats() : null))
+      console.log(`[统计] ${step.stats}：${JSON.stringify(st)}`)
     }
     if (step.shot) {
       if (!step.noWait) await page.waitForTimeout(100)

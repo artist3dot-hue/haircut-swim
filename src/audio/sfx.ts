@@ -23,6 +23,8 @@ export class Sfx {
   private nextBeat = 0
   private beat = 0
   private tickLast = 0
+  private lastClang = 0
+  private lastThud = 0
   /** 统计：播放 / 并入底噪的剪断音数量 */
   snipsPlayed = 0
   snipsMerged = 0
@@ -284,6 +286,126 @@ export class Sfx {
     hp.connect(g)
     g.connect(this.master)
     n.start(t, Math.random() * 0.9, 0.05)
+  }
+
+  /** 简单的衰减正弦（给各种"叮""铛"用）。 */
+  private tone(f: number, t: number, vol: number, dec: number, type: OscillatorType = 'sine', slideTo = 0): void {
+    const ctx = this.ctx
+    if (!ctx || !this.master) return
+    const o = ctx.createOscillator()
+    o.type = type
+    o.frequency.setValueAtTime(f, t)
+    if (slideTo > 0) o.frequency.exponentialRampToValueAtTime(slideTo, t + dec)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, t)
+    g.gain.linearRampToValueAtTime(vol, t + 0.002)
+    g.gain.exponentialRampToValueAtTime(0.0005, t + dec)
+    o.connect(g)
+    g.connect(this.master)
+    o.start(t)
+    o.stop(t + dec + 0.02)
+  }
+
+  /** 钢丝发剪不动："铛"（不成谐波比的金属泛音，长一点的尾巴）。限流：同一帧只响一次。 */
+  clang(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.003
+    if (t - this.lastClang < 0.05) return
+    this.lastClang = t
+    const p = 1 + (Math.random() * 2 - 1) * 0.04
+    this.tone(1180 * p, t, 0.12, 0.35, 'triangle')
+    this.tone(2710 * p, t, 0.07, 0.25)
+    this.tone(4190 * p, t, 0.04, 0.16)
+    this.tone(260 * p, t, 0.1, 0.08, 'square', 120)
+  }
+
+  /** 打结发剪了一下没断："咚"（闷、短）。 */
+  thud(): void {
+    const ctx = this.ctx
+    if (!ctx || !this.master || !this.noise) return
+    const t = ctx.currentTime + 0.003
+    if (t - this.lastThud < 0.04) return
+    this.lastThud = t
+    this.tone(210, t, 0.2, 0.09, 'sine', 90)
+    const n = ctx.createBufferSource()
+    n.buffer = this.noise
+    const lp = ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = 1400
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.14, t)
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.05)
+    n.connect(lp)
+    lp.connect(g)
+    g.connect(this.master)
+    n.start(t, Math.random() * 0.9, 0.06)
+  }
+
+  /** 白头发：清亮的"叮"。 */
+  ding(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.02
+    this.tone(2637, t, 0.1, 0.5)
+    this.tone(3951, t + 0.005, 0.05, 0.35)
+    this.tone(5274, t + 0.01, 0.025, 0.2)
+  }
+
+  /** 危险预兆：心跳（两下），danger 0..1 越大越响。 */
+  heartbeat(danger: number): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.01
+    const v = 0.18 + danger * 0.25
+    this.tone(70, t, v, 0.14, 'sine', 45)
+    this.tone(62, t + 0.16, v * 0.7, 0.12, 'sine', 42)
+  }
+
+  /** 最后几秒的倒计时"嘀"。 */
+  countdown(last: boolean): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.005
+    this.tone(last ? 1320 : 990, t, 0.09, last ? 0.35 : 0.1, 'square')
+  }
+
+  /** 剪到泳帽线以上：上扬琶音。 */
+  fanfare(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.01
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5]
+    notes.forEach((f, i) => {
+      this.tone(f, t + i * 0.07, 0.08, 0.4, 'square')
+      this.tone(f * 2, t + i * 0.07, 0.03, 0.3)
+    })
+  }
+
+  /** 被头发淹没：往下滑的闷声 + 一阵沙沙。 */
+  drown(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.01
+    this.tone(330, t, 0.16, 0.9, 'triangle', 70)
+    this.tone(247, t + 0.25, 0.12, 0.9, 'triangle', 55)
+    this.rustle(30)
+  }
+
+  /** 时间到：两声短"嘟"。 */
+  timeUp(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    const t = ctx.currentTime + 0.01
+    this.tone(784, t, 0.1, 0.18, 'square')
+    this.tone(523.25, t + 0.2, 0.1, 0.4, 'square')
+  }
+
+  /** 按钮点击。 */
+  click(): void {
+    const ctx = this.ctx
+    if (!ctx) return
+    this.tone(1500, ctx.currentTime + 0.002, 0.06, 0.05, 'square', 900)
   }
 
   /** 500 连击后的鼓点（GDD："背景音乐加鼓点"；目前还没有背景音乐，先只有鼓）。 */

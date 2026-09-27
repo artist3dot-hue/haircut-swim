@@ -15,7 +15,17 @@ export interface StrandParams {
   maxLen: number
 }
 
+import type { HairKind } from '../data/hair'
+
 export class Strand {
+  /** 头发种类（见 src/data/hair.ts） */
+  kind: HairKind = 'normal'
+  /** 还要剪几下才断（打结发） */
+  hitsLeft = 1
+  /** 打结的位置（材料坐标） */
+  knotMat = 0
+  /** 刚被剪了一下的闪光时间（打结发、钢丝发） */
+  flash = 0
   x: number[] = []
   y: number[] = []
   px: number[] = []
@@ -75,21 +85,22 @@ export class Strand {
     this.length += amount
     this.mat[0] = this.emitted
     this.rest[0]! += amount
-    // 根段太长就在根部插入新点
+    // 根段太长就在根部这一段里插入新点：新点离下一个点正好一段长，
+    // 所以一次长很多也会被切成一节一节（每节有自己的材料坐标，卷曲才连续）
     while (this.rest[0]! >= p.segLen * 2) {
       const r0 = this.rest[0]!
       const dx = this.x[1]! - this.x[0]!
       const dy = this.y[1]! - this.y[0]!
-      const d = Math.hypot(dx, dy) || 1
-      const nx = this.x[0]! + (dx / d) * p.segLen
-      const ny = this.y[0]! + (dy / d) * p.segLen
+      const k = (r0 - p.segLen) / r0
+      const nx = this.x[0]! + dx * k
+      const ny = this.y[0]! + dy * k
       this.x.splice(1, 0, nx)
       this.y.splice(1, 0, ny)
       this.px.splice(1, 0, nx)
       this.py.splice(1, 0, ny)
-      this.mat.splice(1, 0, this.emitted - p.segLen)
-      this.rest[0] = p.segLen
-      this.rest.splice(1, 0, r0 - p.segLen)
+      this.mat.splice(1, 0, this.mat[1]! + p.segLen)
+      this.rest[0] = r0 - p.segLen
+      this.rest.splice(1, 0, p.segLen)
     }
   }
 

@@ -25,11 +25,11 @@ export const JUICE = {
   hairCount: 160,
   /** 后层所占比例 */
   backRatio: 0.4,
-  /** 生长速度（像素/秒，从根部送出） */
-  growthSpeed: 14,
+  /** 生长速度（像素/秒，从根部送出；一局里还会随时间加快，见 data/hair.ts 的 ROUND） */
+  growthSpeed: 10,
   /** 开局头发长度范围 */
-  startLenMin: 300,
-  startLenMax: 470,
+  startLenMin: 200,
+  startLenMax: 360,
   /** 每段长度 */
   segLen: 10,
   /** 重力（头发模拟） */
@@ -89,6 +89,10 @@ export const JUICE = {
   pitchJitter: 0.08,
   /** 手机震动（毫秒） */
   vibrateMs: 8,
+  /** 稀有头发手机震动（毫秒） */
+  vibrateRareMs: 20,
+  /** 稀有头发顿帧（GDD：40 毫秒） */
+  hitstopRare: 0.04,
 }
 
 export type JuiceKey = keyof typeof JUICE
